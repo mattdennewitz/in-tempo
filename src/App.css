@@ -1,6 +1,88 @@
 .app {
-  max-width: 800px;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 2rem;
   padding: 2rem;
+}
+
+/* Pattern display */
+.pattern-display {
   text-align: center;
+}
+
+.pattern-text {
+  font-size: 1.5rem;
+  font-weight: 500;
+  color: #213547;
+  letter-spacing: 0.01em;
+}
+
+/* Transport controls */
+.transport {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.transport-btn {
+  padding: 0.5rem 1.5rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  border: 1px solid #c0c0c0;
+  border-radius: 4px;
+  background: #fff;
+  color: #213547;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.transport-btn:hover:not(:disabled) {
+  border-color: #888;
+  background: #f5f5f5;
+}
+
+.transport-btn:active:not(:disabled) {
+  background: #eee;
+}
+
+.transport-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.start-btn {
+  border-color: #4a8c6f;
+  color: #4a8c6f;
+}
+
+.start-btn:hover:not(:disabled) {
+  border-color: #3a7c5f;
+  background: #f0f8f4;
+}
+
+/* BPM slider */
+.bpm-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.bpm-label {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.bpm-slider input[type="range"] {
+  width: 260px;
+  accent-color: #4a8c6f;
+}
+
+.bpm-value {
+  font-size: 0.9rem;
+  color: #213547;
+  min-width: 5rem;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
 }

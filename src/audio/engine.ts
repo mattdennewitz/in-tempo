@@ -18,6 +18,7 @@ export class AudioEngine {
   private scheduler: Scheduler | null = null;
   private performer: Performer | null = null;
   private initialized: boolean = false;
+  private pendingOnStateChange: ((state: EngineState) => void) | null = null;
 
   /**
    * Initialize the audio subsystem: create AudioContext, load worklet module,
@@ -32,6 +33,12 @@ export class AudioEngine {
     this.voicePool = new VoicePool(this.audioContext, 4);
     this.performer = new Performer(PATTERNS);
     this.scheduler = new Scheduler(this.audioContext, this.voicePool, this.performer);
+
+    // Apply any callback that was set before initialization
+    if (this.pendingOnStateChange) {
+      this.scheduler.onStateChange = this.pendingOnStateChange;
+      this.pendingOnStateChange = null;
+    }
 
     this.initialized = true;
   }
@@ -73,10 +80,12 @@ export class AudioEngine {
     return this.scheduler?.getState() ?? { playing: false, currentPattern: 1, bpm: 120 };
   }
 
-  /** Set state change callback. Passes through to scheduler. */
+  /** Set state change callback. Passes through to scheduler, or stores for later. */
   set onStateChange(cb: ((state: EngineState) => void) | null) {
     if (this.scheduler) {
       this.scheduler.onStateChange = cb;
+    } else {
+      this.pendingOnStateChange = cb;
     }
   }
 
