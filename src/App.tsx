@@ -35,12 +35,10 @@ function App() {
 
   const handleReset = useCallback(() => {
     engineRef.current.reset();
-    setBpm(120);
   }, []);
 
   const handleBpmChange = useCallback((newBpm: number) => {
     engineRef.current.setBpm(newBpm);
-    setBpm(newBpm);
   }, []);
 
   return (

@@ -100,6 +100,7 @@ export class AudioEngine {
     this.voicePool = null;
     this.scheduler = null;
     this.performer = null;
+    this.pendingOnStateChange = null;
     this.initialized = false;
   }
 }

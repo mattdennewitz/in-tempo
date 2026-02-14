@@ -46,8 +46,8 @@ export class Scheduler {
   }
 
   /**
-   * Stop playback. Lets currently sounding notes ring out (per user decision).
-   * Schedules noteOff for active voices after a short delay.
+   * Stop playback. Lets currently sounding notes ring out via their
+   * previously-scheduled release timers.
    */
   stop(): void {
     this._playing = false;
@@ -68,6 +68,7 @@ export class Scheduler {
     this.releaseTimers.clear();
     this.voicePool.stopAll();
     this.performer.reset();
+    this._bpm = 120;
     this.lastScheduledNote = null;
     this.fireStateChange();
   }

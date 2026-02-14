@@ -19,14 +19,18 @@ class SynthProcessor extends AudioWorkletProcessor {
     this.frequency = 0;
     this.envelope = 0;
     this.playing = false;
+    this.stopping = false;
 
     // Detune factor for second oscillator (~3 cents sharp)
     this.detuneFactor = 1.0017;
 
     // Envelope: attack ramp to avoid clicks, exponential decay on release
-    this.attackRate = 1.0 / (0.005 * 44100); // ~5ms attack ramp
-    this.decayRate = 0.9995; // ~200ms decay at 44.1kHz
+    this.attackRate = 1.0 / (0.005 * sampleRate); // ~5ms attack ramp
+    this.decayRate = 0.9995; // ~315ms decay at 44.1kHz (ln(0.001)/ln(0.9995) ≈ 13815 samples)
     this.targetEnvelope = 0; // what envelope is ramping toward
+
+    // Fast decay rate for voice steal (~2ms at 44.1kHz) to avoid click
+    this.stopDecayRate = Math.pow(0.001, 1.0 / (0.002 * sampleRate));
 
     // Max output gain to avoid clipping
     this.maxGain = 0.3;
@@ -37,6 +41,7 @@ class SynthProcessor extends AudioWorkletProcessor {
         this.frequency = data.frequency;
         this.targetEnvelope = 1.0;
         this.playing = true;
+        this.stopping = false;
         // Reset phases to avoid discontinuity on frequency change
         this.phase1 = 0;
         this.phase2 = 0;
@@ -46,7 +51,7 @@ class SynthProcessor extends AudioWorkletProcessor {
       } else if (data.type === 'stop') {
         this.playing = false;
         this.targetEnvelope = 0;
-        this.envelope = 0;
+        this.stopping = true;
       }
     };
   }
@@ -67,6 +72,8 @@ class SynthProcessor extends AudioWorkletProcessor {
       // Ramp envelope toward target (attack ramp up, decay ramp down)
       if (this.envelope < this.targetEnvelope) {
         this.envelope = Math.min(this.envelope + this.attackRate, this.targetEnvelope);
+      } else if (this.stopping && this.envelope > 0) {
+        this.envelope *= this.stopDecayRate; // fast ~2ms decay on voice steal
       } else if (!this.playing && this.envelope > 0) {
         this.envelope *= this.decayRate;
       }
