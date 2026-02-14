@@ -83,17 +83,49 @@
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated during roadmap creation) | | |
+| AUD-01 | Phase 1 | Pending |
+| AUD-02 | Phase 1 | Pending |
+| AUD-03 | Phase 1 | Pending |
+| AUD-04 | Phase 1 | Pending |
+| AUD-05 | Phase 1 | Pending |
+| AUD-06 | Phase 1 | Pending |
+| AUD-07 | Phase 1 | Pending |
+| SCR-01 | Phase 1 | Pending |
+| SCR-02 | Phase 1 | Pending |
+| SCR-03 | Phase 4 | Pending |
+| SCR-04 | Phase 4 | Pending |
+| SCR-05 | Phase 4 | Pending |
+| ENS-01 | Phase 2 | Pending |
+| ENS-02 | Phase 2 | Pending |
+| ENS-03 | Phase 2 | Pending |
+| ENS-04 | Phase 2 | Pending |
+| ENS-05 | Phase 2 | Pending |
+| ENS-06 | Phase 2 | Pending |
+| ENS-07 | Phase 2 | Pending |
+| ENS-08 | Phase 3 | Pending |
+| ENS-09 | Phase 3 | Pending |
+| ENS-10 | Phase 2 | Pending |
+| INS-01 | Phase 1 | Pending |
+| INS-02 | Phase 3 | Pending |
+| INS-03 | Phase 3 | Pending |
+| INS-04 | Phase 3 | Pending |
+| VIZ-01 | Phase 3 | Pending |
+| VIZ-02 | Phase 3 | Pending |
+| VIZ-03 | Phase 3 | Pending |
+| VIZ-04 | Phase 3 | Pending |
+| VIZ-05 | Phase 3 | Pending |
+| VIZ-06 | Phase 1 | Pending |
+| VIZ-07 | Phase 3 | Pending |
+| VIZ-08 | Phase 1 | Pending |
+| VIZ-09 | Phase 3 | Pending |
 
 **Coverage:**
-- v1 requirements: 28 total
-- Mapped to phases: 0
-- Unmapped: 28 ⚠️
+- v1 requirements: 35 total
+- Mapped to phases: 35
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-14*
-*Last updated: 2026-02-14 after initial definition*
+*Last updated: 2026-02-14 after roadmap creation*
