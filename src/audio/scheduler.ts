@@ -27,7 +27,7 @@ export class Scheduler {
   private _playing: boolean = false;
   private timerId: ReturnType<typeof setTimeout> | null = null;
   private lastScheduledNote: ScoreNote | null = null;
-  private releaseTimers: ReturnType<typeof setTimeout>[] = [];
+  private releaseTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
 
   onStateChange: ((state: EngineState) => void) | null = null;
 
@@ -62,10 +62,10 @@ export class Scheduler {
   reset(): void {
     this.stop();
     // Clear all pending release timers
-    for (const timer of this.releaseTimers) {
+    for (const timer of this.releaseTimers.values()) {
       clearTimeout(timer);
     }
-    this.releaseTimers = [];
+    this.releaseTimers.clear();
     this.voicePool.stopAll();
     this.performer.reset();
     this.lastScheduledNote = null;
@@ -131,6 +131,14 @@ export class Scheduler {
     const voice = this.voicePool.claim();
     const frequency = midiToFrequency(note.midi);
 
+    // Cancel any pending release timer for this voice (prevents race condition
+    // when voice is stolen: old timer would otherwise noteOff the new note)
+    const existingTimer = this.releaseTimers.get(voice.index);
+    if (existingTimer !== undefined) {
+      clearTimeout(existingTimer);
+      this.releaseTimers.delete(voice.index);
+    }
+
     voice.node.port.postMessage({ type: 'noteOn', frequency });
 
     // Calculate note end time and schedule release
@@ -141,14 +149,10 @@ export class Scheduler {
     const releaseTimer = setTimeout(() => {
       voice.node.port.postMessage({ type: 'noteOff' });
       this.voicePool.release(voice.index);
-      // Remove this timer from tracking
-      const idx = this.releaseTimers.indexOf(releaseTimer);
-      if (idx !== -1) {
-        this.releaseTimers.splice(idx, 1);
-      }
+      this.releaseTimers.delete(voice.index);
     }, delayMs);
 
-    this.releaseTimers.push(releaseTimer);
+    this.releaseTimers.set(voice.index, releaseTimer);
     this.fireStateChange();
   }
 
