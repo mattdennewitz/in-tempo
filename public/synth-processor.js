@@ -23,8 +23,10 @@ class SynthProcessor extends AudioWorkletProcessor {
     // Detune factor for second oscillator (~3 cents sharp)
     this.detuneFactor = 1.0017;
 
-    // Envelope decay rate per sample (~200ms decay at 44.1kHz)
-    this.decayRate = 0.9995;
+    // Envelope: attack ramp to avoid clicks, exponential decay on release
+    this.attackRate = 1.0 / (0.005 * 44100); // ~5ms attack ramp
+    this.decayRate = 0.9995; // ~200ms decay at 44.1kHz
+    this.targetEnvelope = 0; // what envelope is ramping toward
 
     // Max output gain to avoid clipping
     this.maxGain = 0.3;
@@ -33,12 +35,17 @@ class SynthProcessor extends AudioWorkletProcessor {
       const data = e.data;
       if (data.type === 'noteOn') {
         this.frequency = data.frequency;
-        this.envelope = 1.0;
+        this.targetEnvelope = 1.0;
         this.playing = true;
+        // Reset phases to avoid discontinuity on frequency change
+        this.phase1 = 0;
+        this.phase2 = 0;
       } else if (data.type === 'noteOff') {
         this.playing = false;
+        this.targetEnvelope = 0;
       } else if (data.type === 'stop') {
         this.playing = false;
+        this.targetEnvelope = 0;
         this.envelope = 0;
       }
     };
@@ -57,6 +64,13 @@ class SynthProcessor extends AudioWorkletProcessor {
     const freq2 = this.frequency * this.detuneFactor;
 
     for (let i = 0; i < channel0.length; i++) {
+      // Ramp envelope toward target (attack ramp up, decay ramp down)
+      if (this.envelope < this.targetEnvelope) {
+        this.envelope = Math.min(this.envelope + this.attackRate, this.targetEnvelope);
+      } else if (!this.playing && this.envelope > 0) {
+        this.envelope *= this.decayRate;
+      }
+
       if (this.envelope > 0.001) {
         // Dual sine oscillators
         const osc1 = Math.sin(this.phase1 * twoPi);
@@ -72,11 +86,6 @@ class SynthProcessor extends AudioWorkletProcessor {
         // Wrap phases to avoid floating point precision loss
         if (this.phase1 >= 1.0) this.phase1 -= 1.0;
         if (this.phase2 >= 1.0) this.phase2 -= 1.0;
-
-        // Apply decay when not playing (noteOff received)
-        if (!this.playing) {
-          this.envelope *= this.decayRate;
-        }
       } else {
         channel0[i] = 0;
         this.envelope = 0;
