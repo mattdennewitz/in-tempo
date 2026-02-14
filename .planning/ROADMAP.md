@@ -27,11 +27,12 @@ InTempo delivers a browser-based generative performance engine in four phases: f
   3. User can change BPM and hear the tempo shift immediately (or on next note)
   4. A 10-minute test run shows no audio glitches and no memory growth in DevTools (voice pool working)
   5. Riley's 53 patterns play back as recognizable melodic content (not random noise)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [ ] 01-01-PLAN.md -- Project scaffold, AudioWorklet processor, and 53 Riley patterns as score data
+- [ ] 01-02-PLAN.md -- Voice pool, lookahead scheduler, AudioEngine facade, and performer logic
+- [ ] 01-03-PLAN.md -- React UI (transport, BPM slider, pattern display) wired to audio engine
 
 ### Phase 2: Ensemble AI
 **Goal**: Multiple simulated performers independently navigate the shared score with emergent, believable musical behavior
@@ -85,7 +86,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Audio Engine + Score Foundation | 0/TBD | Not started | - |
+| 1. Audio Engine + Score Foundation | 0/3 | Planned | - |
 | 2. Ensemble AI | 0/TBD | Not started | - |
 | 3. Visualization + Instruments + Polish | 0/TBD | Not started | - |
 | 4. Composition Modes | 0/TBD | Not started | - |
