@@ -66,6 +66,11 @@ export class VoicePool {
     this.claimOrder = [];
   }
 
+  /** Number of voices in the pool. */
+  get size(): number {
+    return this.voices.length;
+  }
+
   /** Disconnect all nodes for cleanup on reset/destroy. */
   dispose(): void {
     for (const voice of this.voices) {
