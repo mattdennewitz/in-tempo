@@ -6,8 +6,8 @@ interface BpmSliderProps {
 
 export function BpmSlider({ bpm, onChange, disabled }: BpmSliderProps) {
   return (
-    <div className="bpm-slider">
-      <label className="bpm-label" htmlFor="bpm-range">Tempo</label>
+    <div className="flex items-center gap-3">
+      <label className="text-sm text-muted-foreground" htmlFor="bpm-range">Tempo</label>
       <input
         id="bpm-range"
         type="range"
@@ -17,8 +17,9 @@ export function BpmSlider({ bpm, onChange, disabled }: BpmSliderProps) {
         value={bpm}
         onChange={(e) => onChange(Number(e.target.value))}
         disabled={disabled}
+        className="w-64 accent-foreground"
       />
-      <span className="bpm-value">{bpm} BPM</span>
+      <span className="text-sm tabular-nums min-w-[5rem]">{bpm} BPM</span>
     </div>
   );
 }

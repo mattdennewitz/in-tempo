@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** Ensemble behavior must feel alive -- performers making believable musical decisions over a precisely timed audio engine, so each performance is unique and compelling.
-**Current focus:** Phase 2 Complete -- Ready for Phase 3
+**Current focus:** Phase 4 -- Composition Modes
 
 ## Current Position
 
-Phase: 2 of 4 (Ensemble AI) -- COMPLETE
-Plan: 2 of 2 in current phase -- COMPLETE
-Status: Phase Complete
-Last activity: 2026-02-15 -- Completed 02-02-PLAN.md
+Phase: 4 of 4 (Composition Modes)
+Plan: 3 of 3 in current phase -- COMPLETE
+Status: Complete
+Last activity: 2026-02-15 -- Completed 04-03-PLAN.md
 
-Progress: [################--] 83%
+Progress: [##################] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
+- Total plans completed: 8
 - Average duration: 4min
-- Total execution time: 0.37 hours
+- Total execution time: 0.53 hours
 
 **By Phase:**
 
@@ -29,9 +29,11 @@ Progress: [################--] 83%
 |-------|-------|-------|----------|
 | 01-audio-engine-score-foundation | 3/3 | 16min | 5min |
 | 02-ensemble-ai | 2/2 | 5min | 2.5min |
+| 03-visualization-instruments-polish | 3/3 | 10min | 3.3min |
+| 04-composition-modes | 3/3 | 8min | 2.7min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (4min), 01-02 (2min), 01-03 (10min), 02-01 (3min), 02-02 (2min)
+- Last 5 plans: 02-02 (2min), 03-01 (2min), 03-02 (3min), 03-03 (5min), 04-03 (2min)
 - Trend: Fast
 
 *Updated after each plan completion*
@@ -63,6 +65,27 @@ Recent decisions affecting current work:
 - [02-02]: Voice pool sized at 2x performer count (16 voices for 8 performers) for headroom
 - [02-02]: Global voice claim/release handles multi-performer contention naturally via voice stealing
 - [02-02]: Performer grid uses CSS opacity transitions for playing/silent/complete states
+- [03-01]: Canvas rAF loop reads from ref (not React state) to avoid render-loop coupling
+- [03-01]: STATE_COLORS separated from base PALETTE for clean renderer code
+- [03-01]: ScoreModeSelector uses native select element with disabled options for simplicity
+- [03-02]: Deterministic instrument assignment via performerId % 3 for stable, varied timbres
+- [03-02]: SamplePlayer routes through shared GainNode at 0.6 to balance with synth voices
+- [03-02]: Pulse uses fresh OscillatorNode per beat with auto-disconnect for zero memory growth
+- [03-03]: Pending removals processed at start of tick() before snapshot -- zero mid-iteration mutation risk
+- [03-03]: VoicePool only grows, never shrinks -- excess voices stay available to avoid audio glitches
+- [03-03]: New performers start at ensemble minimum pattern index for musical blending
+- [03-03]: Scheduler.fireStateChange() made public so Engine can trigger UI updates after add/remove
+- [04-01]: bandWidth formula Math.max(2, Math.min(5, Math.round(patterns.length * 0.06))) -- proportional to pattern count
+- [04-01]: enforceBand accepts bandWidth as parameter with default=3 for backward compatibility
+- [04-01]: Ensemble.scoreMode getter returns 'riley' as default -- mode switching deferred to Plan 03
+- [04-01]: Generative motif bank: 2-4 note fragments stored from 30% of patterns, reused via transpose/invert/retrograde
+- [04-02]: C-major pentatonic (C D E G A) for Euclidean mode -- distinguishes from generative's full diatonic
+- [04-02]: setScoreMode() preserves onStateChange callback across scheduler rebuild
+- [04-02]: No auto-restart after mode switch -- user must click Start
+- [04-02]: Interlocking complementary pairs via rhythm inversion at ~30% probability
+- [04-03]: ScoreModeSelector uses button cards with aria-pressed for accessibility
+- [04-03]: Mode badge as uppercase pill above performer grid during playback
+- [04-03]: totalPatterns and scoreMode sourced from engine state (not hardcoded)
 
 ### Pending Todos
 
@@ -71,12 +94,12 @@ None yet.
 ### Blockers/Concerns
 
 - GT Canon font files need to be provided by user before Phase 3 visual identity work
-- Sampled instrument audio files (piano, marimba) need to be sourced before Phase 3 instrument work
+- ~~Sampled instrument audio files~~ RESOLVED: smplr loads piano/marimba from CDN at runtime
 
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 02-02-PLAN.md (Ensemble-Audio integration: beat clock scheduler, 16-voice pool, per-performer UI grid)
+Stopped at: Completed 04-03-PLAN.md (Score mode selector UI + enhanced performer cards)
 Resume file: None
 
-**Phase 2 COMPLETE** - Full multi-performer In C performance with ensemble AI driving all musical decisions. Ready for Phase 3.
+**All phases complete.** Score mode selector UI wired, performer cards enhanced with rep/total tracking, mode badge visible during playback. All 4 phases delivered: audio engine, ensemble AI, visualization/instruments/polish, composition modes (engine + UI).

@@ -4,9 +4,11 @@ export interface ScoreNote {
 }
 
 export interface Pattern {
-  id: number;       // 1-53
+  id: number;       // 1-based pattern ID
   notes: ScoreNote[];
 }
+
+export type ScoreMode = 'riley' | 'generative' | 'euclidean';
 
 export interface EngineState {
   playing: boolean;
@@ -16,11 +18,16 @@ export interface EngineState {
 
 export type TransportCommand = 'start' | 'stop' | 'reset';
 
+export type InstrumentType = 'synth' | 'piano' | 'marimba';
+
 export interface PerformerState {
   id: number;
   patternIndex: number;    // 0-based
   currentPattern: number;  // 1-based (for display)
   status: 'playing' | 'silent' | 'complete';
+  currentRep: number;      // 1-based current repetition (0 when silent/complete)
+  totalReps: number;       // total repetitions for current pattern (0 when silent/complete)
+  instrument: InstrumentType;
 }
 
 export interface EnsembleEngineState {
@@ -28,4 +35,8 @@ export interface EnsembleEngineState {
   bpm: number;
   performers: PerformerState[];
   ensembleComplete: boolean;
+  totalPatterns: number;
+  scoreMode: ScoreMode;
+  pulseEnabled: boolean;
+  performerCount: number;
 }
