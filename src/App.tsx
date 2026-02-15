@@ -6,6 +6,7 @@ import { Transport } from './components/Transport.tsx';
 import { BpmSlider } from './components/BpmSlider.tsx';
 import { PatternDisplay } from './components/PatternDisplay.tsx';
 import { PerformerControls } from './components/PerformerControls.tsx';
+import { HumanizationToggle } from './components/HumanizationToggle.tsx';
 import './App.css';
 
 const INITIAL_STATE: EnsembleEngineState = {
@@ -55,6 +56,14 @@ function App() {
     engineRef.current.setScoreMode(mode);
   }, []);
 
+  const handleHumanizationToggle = useCallback(() => {
+    engineRef.current.setHumanization(!engineState.humanizationEnabled);
+  }, [engineState.humanizationEnabled]);
+
+  const handleIntensityChange = useCallback((intensity: 'subtle' | 'moderate' | 'expressive') => {
+    engineRef.current.setHumanizationIntensity(intensity);
+  }, []);
+
   const handleAddPerformer = useCallback(() => {
     if (engineState.playing) {
       engineRef.current.addPerformer();
@@ -99,6 +108,12 @@ function App() {
         performers={engineState.performers}
         disabled={false}
         count={engineState.playing ? undefined : engineState.performerCount}
+      />
+      <HumanizationToggle
+        enabled={engineState.humanizationEnabled}
+        intensity={engineState.humanizationIntensity}
+        onToggle={handleHumanizationToggle}
+        onIntensityChange={handleIntensityChange}
       />
       <BpmSlider
         bpm={engineState.bpm}
