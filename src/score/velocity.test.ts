@@ -7,6 +7,7 @@ import {
   type VelocityConfig,
   type VelocityPersonality,
 } from './velocity.ts';
+import { SeededRng } from './rng.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -142,6 +143,7 @@ describe('computeVelocity', () => {
   });
 
   it('intensity scaling: expressive produces wider velocity spread than subtle', () => {
+    const rng = new SeededRng(42);
     const base = {
       noteIndexInPattern: 1,
       totalNotesInPattern: 8,
@@ -156,10 +158,10 @@ describe('computeVelocity', () => {
 
     for (let i = 0; i < N; i++) {
       expressiveValues.push(
-        computeVelocity({ ...base, config: { enabled: true, intensity: 'expressive' } }),
+        computeVelocity({ ...base, config: { enabled: true, intensity: 'expressive' } }, rng),
       );
       subtleValues.push(
-        computeVelocity({ ...base, config: { enabled: true, intensity: 'subtle' } }),
+        computeVelocity({ ...base, config: { enabled: true, intensity: 'subtle' } }, rng),
       );
     }
 

@@ -14,6 +14,7 @@
  */
 
 import type { ScoreNote, Pattern } from '../audio/types.ts';
+import { SeededRng } from './rng.ts';
 
 // ---------------------------------------------------------------------------
 // C-major pitch utilities
@@ -48,22 +49,20 @@ function nearestCMajorIndex(target: number): number {
 // Random utilities
 // ---------------------------------------------------------------------------
 
+// Module-level RNG reference, set by generateGenerativePatterns() for use by
+// all helper functions within a single generation call.
+let _rng: SeededRng;
+
 function randInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+  return _rng.int(min, max);
 }
 
 function pick<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
+  return _rng.pick(arr);
 }
 
 function weightedPick(options: number[], weights: number[]): number {
-  const total = weights.reduce((a, b) => a + b, 0);
-  let r = Math.random() * total;
-  for (let i = 0; i < options.length; i++) {
-    r -= weights[i];
-    if (r <= 0) return options[i];
-  }
-  return options[options.length - 1];
+  return _rng.weighted(options, weights);
 }
 
 // ---------------------------------------------------------------------------
@@ -233,9 +232,9 @@ function generateMelodicPattern(
   const leapProb = phase === 'climax' ? 0.5 : phase === 'development' ? 0.3 : 0.15;
 
   // Maybe reuse a motif (~20% chance if bank has entries)
-  if (motifBank.length > 0 && Math.random() < 0.2) {
+  if (motifBank.length > 0 && _rng.random() < 0.2) {
     const motif = pick(motifBank);
-    const transform = Math.random();
+    const transform = _rng.random();
     let notes: ScoreNote[];
     if (transform < 0.4) {
       // Transpose by random interval
@@ -254,13 +253,13 @@ function generateMelodicPattern(
 
   for (let i = 0; i < noteCount; i++) {
     // Rest
-    if (Math.random() < restProb) {
+    if (_rng.random() < restProb) {
       const dur = selectDuration(phase);
       notes.push({ midi: 0, duration: dur });
       continue;
     }
 
-    const allowLeap = Math.random() < leapProb;
+    const allowLeap = _rng.random() < leapProb;
     const midi = selectPitch(phase, progress, prevPitch, allowLeap);
     const duration = selectDuration(phase);
     notes.push({ midi, duration });
@@ -309,7 +308,8 @@ function generateEndgamePattern(): ScoreNote[] {
  * Returns 30-80 patterns with progressive arc (intro -> development ->
  * climax -> winddown) using only C-major pitches in the C3-C6 range.
  */
-export function generateGenerativePatterns(): Pattern[] {
+export function generateGenerativePatterns(rng?: SeededRng): Pattern[] {
+  _rng = rng ?? new SeededRng(Date.now() & 0xffffffff);
   const totalPatterns = randInt(30, 80);
   const patterns: Pattern[] = [];
   const motifBank: Motif[] = [];
@@ -325,7 +325,7 @@ export function generateGenerativePatterns(): Pattern[] {
       notes = generateEndgamePattern();
     }
     // ~15% pulse patterns
-    else if (Math.random() < 0.15) {
+    else if (_rng.random() < 0.15) {
       notes = generatePulsePattern(phase, progress);
     }
     // Normal melodic pattern
@@ -340,7 +340,7 @@ export function generateGenerativePatterns(): Pattern[] {
     patterns.push(pattern);
 
     // Store ~30% of patterns as motifs (2-4 note fragments)
-    if (Math.random() < 0.3 && notes.length >= 2) {
+    if (_rng.random() < 0.3 && notes.length >= 2) {
       const start = randInt(0, Math.max(0, notes.length - 3));
       const len = Math.min(randInt(2, 4), notes.length - start);
       motifBank.push({ notes: notes.slice(start, start + len) });

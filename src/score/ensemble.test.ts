@@ -11,6 +11,7 @@ import {
   type AgentPersonality,
 } from './ensemble.ts';
 import { PATTERNS } from './patterns.ts';
+import { SeededRng } from './rng.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -46,6 +47,7 @@ function makeSnapshot(overrides: Partial<EnsembleSnapshot> = {}): EnsembleSnapsh
 
 describe('weightedChoice', () => {
   it('returns valid values and respects weights', () => {
+    const rng = new SeededRng(42);
     const counts = { a: 0, b: 0, c: 0 };
     const options = [
       { value: 'a' as const, weight: 0.7 },
@@ -54,7 +56,7 @@ describe('weightedChoice', () => {
     ];
 
     for (let i = 0; i < 1000; i++) {
-      const result = weightedChoice(options);
+      const result = weightedChoice(options, rng);
       counts[result]++;
     }
 
