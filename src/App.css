@@ -4,6 +4,7 @@
 .mode-badge {
   display: inline-block;
   padding: 0.15rem 0.6rem;
+  margin-bottom: 1rem;
   font-size: 0.7rem;
   font-weight: 500;
   color: #888;

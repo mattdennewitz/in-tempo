@@ -125,10 +125,29 @@ export class AudioEngine {
     return this.ensemble?.agentCount ?? this.initialPerformerCount;
   }
 
-  /** Set initial performer count (before playback starts). No-op if already initialized. */
+  /** Set performer count. Before first start, sets initial count. After init, rebuilds ensemble on next start. */
   setPerformerCount(count: number): void {
-    if (this.initialized) return;
     this.initialPerformerCount = Math.max(2, Math.min(16, count));
+    if (this.initialized && !this.getState().playing) {
+      // Rebuild ensemble with new count so next start() uses it
+      const callback = this.scheduler?.onStateChange ?? null;
+      this.scheduler?.reset();
+      this.voicePool?.stopAll();
+      this.voicePool?.resize(this.initialPerformerCount * 2);
+      this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode, this.velocityConfig);
+      this.scheduler = new Scheduler(
+        this.audioContext!,
+        this.voicePool!,
+        this.ensemble,
+        this.samplePlayer!,
+        this.pulseGenerator!,
+      );
+      this.scheduler.velocityConfigRef = { current: this.velocityConfig };
+      if (callback) {
+        this.scheduler.onStateChange = callback;
+      }
+      this.scheduler.fireStateChange();
+    }
   }
 
   /** Toggle the eighth-note high C pulse. Returns new enabled state. */
