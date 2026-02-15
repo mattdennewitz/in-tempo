@@ -31,7 +31,7 @@
 **Milestone Goal:** Elevate the listening and sharing experience with stereo spread, pattern visualization, shareable seeded performances, and microtiming humanization.
 
 - [x] **Phase 7: Seeded PRNG** — Deterministic performances reproducible via shared URL — completed 2026-02-15
-- [ ] **Phase 8: Microtiming** — Swing, rubato, and per-performer timing personality
+- [x] **Phase 8: Microtiming** — Swing, rubato, and per-performer timing personality — completed 2026-02-15
 - [ ] **Phase 9: Stereo Spread** — Performers panned across the stereo field
 - [ ] **Phase 10: Pattern Visualization** — Score overview and per-performer visual feedback
 
@@ -65,8 +65,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — TDD timing.ts: pure timing offset computation (swing, personality, jitter, density) + extend ensemble types
-- [ ] 08-02-PLAN.md — Wire rubato into Ensemble, apply timing offsets in Scheduler
+- [x] 08-01-PLAN.md — TDD timing.ts: pure timing offset computation (swing, personality, jitter, density) + extend ensemble types
+- [x] 08-02-PLAN.md — Wire rubato into Ensemble, apply timing offsets in Scheduler
 
 ### Phase 9: Stereo Spread
 **Goal**: Each performer occupies a distinct position in the stereo field, giving spatial clarity to the ensemble
@@ -107,7 +107,7 @@ Plans:
 | 5. Velocity Humanization | v1.1 | 3/3 | Complete | 2026-02-15 |
 | 6. MIDI Export | v1.1 | 2/2 | Complete | 2026-02-15 |
 | 7. Seeded PRNG | v1.2 | 3/3 | Complete | 2026-02-15 |
-| 8. Microtiming | v1.2 | 0/TBD | Not started | - |
+| 8. Microtiming | v1.2 | 2/2 | Complete | 2026-02-15 |
 | 9. Stereo Spread | v1.2 | 0/TBD | Not started | - |
 | 10. Pattern Visualization | v1.2 | 0/TBD | Not started | - |
 
