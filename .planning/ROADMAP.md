@@ -62,11 +62,11 @@ Plans:
   2. Each performer has a subtle but audible timing personality (some rush, some drag) creating ensemble spread
   3. Rubato gently breathes the effective tempo so the ensemble feels less mechanical
   4. Microtiming is controlled through the existing humanization toggle and intensity levels
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 08-01: TBD
-- [ ] 08-02: TBD
+- [ ] 08-01-PLAN.md — TDD timing.ts: pure timing offset computation (swing, personality, jitter, density) + extend ensemble types
+- [ ] 08-02-PLAN.md — Wire rubato into Ensemble, apply timing offsets in Scheduler
 
 ### Phase 9: Stereo Spread
 **Goal**: Each performer occupies a distinct position in the stereo field, giving spatial clarity to the ensemble
