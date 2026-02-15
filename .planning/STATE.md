@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** Ensemble behavior must feel alive -- performers making believable musical decisions over a precisely timed audio engine, so each performance is unique and compelling.
-**Current focus:** Phase 3 in progress -- Visualization, Instruments, Polish
+**Current focus:** Phase 3 COMPLETE -- Visualization, Instruments, Polish
 
 ## Current Position
 
-Phase: 3 of 4 (Visualization, Instruments, Polish)
-Plan: 2 of 3 in current phase -- COMPLETE
-Status: Executing
-Last activity: 2026-02-15 -- Completed 03-02-PLAN.md
+Phase: 3 of 4 (Visualization, Instruments, Polish) -- COMPLETE
+Plan: 3 of 3 in current phase -- COMPLETE
+Status: Phase Complete
+Last activity: 2026-02-15 -- Completed 03-03-PLAN.md
 
-Progress: [#################-] 92%
+Progress: [####################] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
+- Total plans completed: 8
 - Average duration: 4min
-- Total execution time: 0.45 hours
+- Total execution time: 0.53 hours
 
 **By Phase:**
 
@@ -29,10 +29,10 @@ Progress: [#################-] 92%
 |-------|-------|-------|----------|
 | 01-audio-engine-score-foundation | 3/3 | 16min | 5min |
 | 02-ensemble-ai | 2/2 | 5min | 2.5min |
-| 03-visualization-instruments-polish | 2/3 | 5min | 2.5min |
+| 03-visualization-instruments-polish | 3/3 | 10min | 3.3min |
 
 **Recent Trend:**
-- Last 5 plans: 01-03 (10min), 02-01 (3min), 02-02 (2min), 03-01 (2min), 03-02 (3min)
+- Last 5 plans: 02-01 (3min), 02-02 (2min), 03-01 (2min), 03-02 (3min), 03-03 (5min)
 - Trend: Fast
 
 *Updated after each plan completion*
@@ -70,6 +70,10 @@ Recent decisions affecting current work:
 - [03-02]: Deterministic instrument assignment via performerId % 3 for stable, varied timbres
 - [03-02]: SamplePlayer routes through shared GainNode at 0.6 to balance with synth voices
 - [03-02]: Pulse uses fresh OscillatorNode per beat with auto-disconnect for zero memory growth
+- [03-03]: Pending removals processed at start of tick() before snapshot -- zero mid-iteration mutation risk
+- [03-03]: VoicePool only grows, never shrinks -- excess voices stay available to avoid audio glitches
+- [03-03]: New performers start at ensemble minimum pattern index for musical blending
+- [03-03]: Scheduler.fireStateChange() made public so Engine can trigger UI updates after add/remove
 
 ### Pending Todos
 
@@ -83,7 +87,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 03-02-PLAN.md (Sampled instruments via smplr, pulse generator, instrument routing in scheduler)
+Stopped at: Completed 03-03-PLAN.md (Dynamic performer add/remove with mutation queueing and VoicePool resize)
 Resume file: None
 
-**Phase 3 in progress** - Canvas visualization, visual identity, and sampled instruments complete. Next: 03-03 (final polish).
+**Phase 3 COMPLETE** - Canvas visualization, sampled instruments, and dynamic performer management all done. Ready for Phase 4 (alternate composition modes).
