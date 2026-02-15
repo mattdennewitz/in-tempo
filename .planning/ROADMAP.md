@@ -21,7 +21,7 @@
 
 **Milestone Goal:** Add velocity humanization to make performances feel more alive in audio and MIDI, then export performances as downloadable multi-track MIDI files. Default to 4 performers for a cleaner listening experience.
 
-- [ ] **Phase 5: Velocity Humanization** — Per-note velocity variation with personality, metric accents, and phrase contour audible in playback
+- [x] **Phase 5: Velocity Humanization** — Per-note velocity variation with personality, metric accents, and phrase contour audible in playback — completed 2026-02-15
 - [ ] **Phase 6: MIDI Export** — Record and export performances as downloadable multi-track .mid files
 
 ## Phase Details
@@ -40,9 +40,9 @@
 **Plans**: 3 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Velocity computation model (TDD: pure functions for jitter, personality, accent, contour)
-- [ ] 05-02-PLAN.md — Wire velocity through audio pipeline (ensemble, scheduler, synth, sampler) + CFG-01
-- [ ] 05-03-PLAN.md — Humanization UI toggle + end-to-end listening verification
+- [x] 05-01-PLAN.md — Velocity computation model (TDD: pure functions for jitter, personality, accent, contour)
+- [x] 05-02-PLAN.md — Wire velocity through audio pipeline (ensemble, scheduler, synth, sampler) + CFG-01
+- [x] 05-03-PLAN.md — Humanization UI toggle + end-to-end listening verification
 
 ### Phase 6: MIDI Export
 **Goal**: Users can download a multi-track MIDI file that faithfully captures the performance they heard
@@ -71,9 +71,10 @@ Phases execute in numeric order: 5 → 6
 | 2. Ensemble AI | v1.0 | 2/2 | Complete | 2026-02-15 |
 | 3. Visualization + Instruments + Polish | v1.0 | 3/3 | Complete | 2026-02-15 |
 | 4. Composition Modes | v1.0 | 3/3 | Complete | 2026-02-15 |
-| 5. Velocity Humanization | v1.1 | 0/3 | Not started | - |
+| 5. Velocity Humanization | v1.1 | 3/3 | Complete | 2026-02-15 |
 | 6. MIDI Export | v1.1 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-15*
 *Last updated: 2026-02-15*
+*Phase 5 completed: 2026-02-15*
