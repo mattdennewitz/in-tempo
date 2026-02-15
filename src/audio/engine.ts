@@ -1,28 +1,29 @@
 /**
  * AudioEngine - Facade class exposing a clean API for React.
  *
- * Owns the AudioContext, loads the AudioWorklet module, creates the voice pool
- * and scheduler, and provides start/stop/reset/setBpm controls.
+ * Owns the AudioContext, loads the AudioWorklet module, creates the voice pool,
+ * ensemble, and scheduler, and provides start/stop/reset/setBpm controls.
  *
  * Completely framework-agnostic: no React imports, no DOM access.
  */
-import type { EngineState } from './types.ts';
+import type { EnsembleEngineState } from './types.ts';
 import { VoicePool } from './voice-pool.ts';
 import { Scheduler } from './scheduler.ts';
-import { Performer } from '../score/performer.ts';
+import { Ensemble } from '../score/ensemble.ts';
 import { PATTERNS } from '../score/patterns.ts';
 
 export class AudioEngine {
   private audioContext: AudioContext | null = null;
   private voicePool: VoicePool | null = null;
   private scheduler: Scheduler | null = null;
-  private performer: Performer | null = null;
+  private ensemble: Ensemble | null = null;
   private initialized: boolean = false;
-  private pendingOnStateChange: ((state: EngineState) => void) | null = null;
+  private pendingOnStateChange: ((state: EnsembleEngineState) => void) | null = null;
+  private performerCount = 8;
 
   /**
    * Initialize the audio subsystem: create AudioContext, load worklet module,
-   * create voice pool, performer, and scheduler.
+   * create voice pool, ensemble, and scheduler.
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
@@ -30,9 +31,9 @@ export class AudioEngine {
     this.audioContext = new AudioContext();
     await this.audioContext.audioWorklet.addModule('/synth-processor.js');
 
-    this.voicePool = new VoicePool(this.audioContext, 4);
-    this.performer = new Performer(PATTERNS);
-    this.scheduler = new Scheduler(this.audioContext, this.voicePool, this.performer);
+    this.ensemble = new Ensemble(this.performerCount, PATTERNS);
+    this.voicePool = new VoicePool(this.audioContext, this.performerCount * 2);
+    this.scheduler = new Scheduler(this.audioContext, this.voicePool, this.ensemble);
 
     // Apply any callback that was set before initialization
     if (this.pendingOnStateChange) {
@@ -60,28 +61,33 @@ export class AudioEngine {
     this.scheduler!.start();
   }
 
-  /** Stop playback. Lets current note ring out. */
+  /** Stop playback. Lets current notes ring out. */
   stop(): void {
     this.scheduler?.stop();
   }
 
-  /** Stop playback, silence all voices, and reset performer to pattern 1. */
+  /** Stop playback, silence all voices, and reset ensemble to initial state. */
   reset(): void {
     this.scheduler?.reset();
   }
 
-  /** Set BPM (clamped to 100-180). Takes effect on next note. */
+  /** Set BPM (clamped to 100-180). Takes effect on next beat. */
   setBpm(bpm: number): void {
     this.scheduler?.setBpm(bpm);
   }
 
-  /** Get current engine state (playing, currentPattern, bpm). */
-  getState(): EngineState {
-    return this.scheduler?.getState() ?? { playing: false, currentPattern: 1, bpm: 120 };
+  /** Get current ensemble engine state. */
+  getState(): EnsembleEngineState {
+    return this.scheduler?.getState() ?? {
+      playing: false,
+      bpm: 120,
+      performers: [],
+      ensembleComplete: false,
+    };
   }
 
   /** Set state change callback. Passes through to scheduler, or stores for later. */
-  set onStateChange(cb: ((state: EngineState) => void) | null) {
+  set onStateChange(cb: ((state: EnsembleEngineState) => void) | null) {
     if (this.scheduler) {
       this.scheduler.onStateChange = cb;
     } else {
@@ -99,7 +105,7 @@ export class AudioEngine {
     this.audioContext = null;
     this.voicePool = null;
     this.scheduler = null;
-    this.performer = null;
+    this.ensemble = null;
     this.pendingOnStateChange = null;
     this.initialized = false;
   }

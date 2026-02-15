@@ -20,6 +20,48 @@
   letter-spacing: 0.01em;
 }
 
+/* Performer grid */
+.performer-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  min-width: 280px;
+}
+
+.performer-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  transition: opacity 0.3s;
+}
+
+.performer-id {
+  color: #888;
+  font-weight: 500;
+  min-width: 1.8em;
+}
+
+.performer-pattern {
+  color: #213547;
+}
+
+.performer-status--playing {
+  opacity: 1;
+}
+
+.performer-status--silent {
+  opacity: 0.4;
+}
+
+.performer-status--complete {
+  opacity: 0.2;
+}
+
 /* Transport controls */
 .transport {
   display: flex;
