@@ -23,7 +23,7 @@ export class AudioEngine {
   private pulseGenerator: PulseGenerator | null = null;
   private initialized: boolean = false;
   private pendingOnStateChange: ((state: EnsembleEngineState) => void) | null = null;
-  private performerCount = 8;
+  private initialPerformerCount = 8;
 
   /**
    * Initialize the audio subsystem: create AudioContext, load worklet module,
@@ -35,8 +35,8 @@ export class AudioEngine {
     this.audioContext = new AudioContext();
     await this.audioContext.audioWorklet.addModule('/synth-processor.js');
 
-    this.ensemble = new Ensemble(this.performerCount, PATTERNS);
-    this.voicePool = new VoicePool(this.audioContext, this.performerCount * 2);
+    this.ensemble = new Ensemble(this.initialPerformerCount, PATTERNS);
+    this.voicePool = new VoicePool(this.audioContext, this.initialPerformerCount * 2);
 
     // Initialize sampled instruments (loads from CDN)
     this.samplePlayer = new SamplePlayer(this.audioContext);
@@ -94,6 +94,32 @@ export class AudioEngine {
     this.scheduler?.setBpm(bpm);
   }
 
+  /** Add a new performer during playback. Returns the new performer's id, or null if not initialized. */
+  addPerformer(): number | null {
+    if (!this.initialized || !this.ensemble || !this.voicePool) return null;
+    const id = this.ensemble.addAgent();
+    this.voicePool.resize(this.ensemble.agentCount * 2);
+    // Fire state change so UI updates
+    this.scheduler?.fireStateChange();
+    return id;
+  }
+
+  /** Remove a performer by id. Returns false if not initialized or performer not found. */
+  removePerformer(id: number): boolean {
+    if (!this.initialized || !this.ensemble) return false;
+    const result = this.ensemble.removeAgent(id);
+    if (result) {
+      // Voice pool does NOT shrink (excess voices stay available -- avoids glitches)
+      this.scheduler?.fireStateChange();
+    }
+    return result;
+  }
+
+  /** Get current performer count. */
+  get performerCount(): number {
+    return this.ensemble?.agentCount ?? 8;
+  }
+
   /** Toggle the eighth-note high C pulse. Returns new enabled state. */
   togglePulse(): boolean {
     return this.scheduler?.togglePulse() ?? false;
@@ -107,6 +133,7 @@ export class AudioEngine {
       performers: [],
       ensembleComplete: false,
       pulseEnabled: false,
+      performerCount: 8,
     };
   }
 

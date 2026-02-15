@@ -119,6 +119,63 @@
   color: #8C9196;
 }
 
+/* Performer controls (+/-) */
+.performer-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.performer-btn {
+  width: 2rem;
+  height: 2rem;
+  font-size: 1.1rem;
+  font-family: inherit;
+  font-weight: 500;
+  border: 1px solid #B8AFA6;
+  border-radius: 4px;
+  background: #FAF8F5;
+  color: #1B2838;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, background-color 0.15s;
+  line-height: 1;
+}
+
+.performer-btn:hover:not(:disabled) {
+  border-color: #E8735A;
+  background: #FDF6EE;
+}
+
+.performer-btn:active:not(:disabled) {
+  background: #F2A995;
+}
+
+.performer-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  color: #8C9196;
+}
+
+.performer-btn-add {
+  border-color: #E8735A;
+  color: #E8735A;
+}
+
+.performer-btn-remove {
+  color: #8C9196;
+}
+
+.performer-count {
+  font-size: 0.9rem;
+  color: #8C9196;
+  min-width: 1.5rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Controls row */
 .controls-row {
   display: flex;

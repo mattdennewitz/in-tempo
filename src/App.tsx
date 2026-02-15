@@ -4,6 +4,7 @@ import type { PerformerState } from './audio/types.ts';
 import { Transport } from './components/Transport.tsx';
 import { BpmSlider } from './components/BpmSlider.tsx';
 import { ScoreModeSelector } from './components/ScoreModeSelector.tsx';
+import { PerformerControls } from './components/PerformerControls.tsx';
 import { PerformerCanvas } from './canvas/PerformerCanvas.tsx';
 import './App.css';
 
@@ -44,6 +45,14 @@ function App() {
     engineRef.current.setBpm(newBpm);
   }, []);
 
+  const handleAddPerformer = useCallback(() => {
+    engineRef.current.addPerformer();
+  }, []);
+
+  const handleRemovePerformer = useCallback((id: number) => {
+    engineRef.current.removePerformer(id);
+  }, []);
+
   return (
     <div className="app">
       <header className="app-header">
@@ -62,6 +71,12 @@ function App() {
           onStart={handleStart}
           onStop={handleStop}
           onReset={handleReset}
+        />
+        <PerformerControls
+          onAdd={handleAddPerformer}
+          onRemove={handleRemovePerformer}
+          performers={performers}
+          disabled={!playing}
         />
         <BpmSlider
           bpm={bpm}

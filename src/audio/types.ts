@@ -32,4 +32,5 @@ export interface EnsembleEngineState {
   performers: PerformerState[];
   ensembleComplete: boolean;
   pulseEnabled: boolean;
+  performerCount: number;
 }

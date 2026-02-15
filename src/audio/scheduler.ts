@@ -99,10 +99,12 @@ export class Scheduler {
       performers: this.ensemble.performerStates,
       ensembleComplete: this.ensemble.isComplete,
       pulseEnabled: this.pulseGenerator.enabled,
+      performerCount: this.ensemble.agentCount,
     };
   }
 
-  private fireStateChange(): void {
+  /** Fire state change callback. Public so Engine can trigger after add/remove performer. */
+  fireStateChange(): void {
     if (this.onStateChange) {
       this.onStateChange(this.getState());
     }
