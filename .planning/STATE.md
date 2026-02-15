@@ -5,30 +5,30 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Ensemble behavior must feel alive -- performers making believable musical decisions over a precisely timed audio engine, so each performance is unique and compelling.
-**Current focus:** Phase 6 in progress -- MIDI recording and export pipeline
+**Current focus:** Phase 6 complete -- MIDI recording and export feature delivered
 
 ## Current Position
 
 Phase: 6 of 6 (MIDI Export)
-Plan: 1 of 2 in current phase
-Status: Plan 01 complete
-Last activity: 2026-02-15 -- Completed 06-01 MIDI recording & export pipeline
+Plan: 2 of 2 in current phase
+Status: Phase 6 complete
+Last activity: 2026-02-15 -- Completed 06-02 MIDI export UI integration
 
-Progress: [██████████░░] 55%
+Progress: [████████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12 (v1.0)
-- Average duration: 3.5min
-- Total execution time: ~0.7 hours
+- Total plans completed: 13 (v1.0 complete)
+- Average duration: 3.7min
+- Total execution time: ~0.8 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 5. Velocity | 3/3 | ~20min | ~7min |
-| 6. MIDI Export | 1/2 | ~7min | ~7min |
+| 6. MIDI Export | 2/2 | ~15min | ~7.5min |
 
 *Updated after each plan completion*
 
@@ -53,6 +53,8 @@ Recent decisions affecting current work:
 - [06-01]: startTick for absolute tick positioning in midi-writer-js NoteEvent
 - [06-01]: midiRecorder ref pattern on Scheduler (same as velocityConfigRef)
 - [06-01]: Ghost note trimming via beatIndex < stopBeat filter
+- [06-02]: ExportButton styled consistently with Transport using shadcn Button variant
+- [06-02]: Export enabled based on engineState.hasRecording (reactive to recording state)
 
 ### Pending Todos
 
@@ -65,5 +67,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 06-01-PLAN.md (MIDI recording & export pipeline)
+Stopped at: Completed 06-02-PLAN.md (MIDI export UI integration) -- Phase 6 complete, v1.0 delivered
 Resume file: None
