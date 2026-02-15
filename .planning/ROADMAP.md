@@ -54,11 +54,11 @@ Plans:
   3. The MIDI file plays back at the same BPM as the original performance
   4. Each track in the DAW shows the correct instrument assignment (piano, marimba, or synth equivalent)
   5. Note velocities in the MIDI file match the humanized velocities heard during playback (not uniform)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
+- [ ] 06-01-PLAN.md — MIDI recording pipeline + export conversion (MidiRecorder, MidiExporter, Scheduler/Engine wiring)
+- [ ] 06-02-PLAN.md — Export button UI + end-to-end verification
 
 ## Progress
 
@@ -72,7 +72,7 @@ Phases execute in numeric order: 5 → 6
 | 3. Visualization + Instruments + Polish | v1.0 | 3/3 | Complete | 2026-02-15 |
 | 4. Composition Modes | v1.0 | 3/3 | Complete | 2026-02-15 |
 | 5. Velocity Humanization | v1.1 | 3/3 | Complete | 2026-02-15 |
-| 6. MIDI Export | v1.1 | 0/TBD | Not started | - |
+| 6. MIDI Export | v1.1 | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-15*
