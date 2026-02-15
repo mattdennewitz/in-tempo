@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** Ensemble behavior must feel alive -- performers making believable musical decisions over a precisely timed audio engine, so each performance is unique and compelling.
-**Current focus:** Phase 2 Complete -- Ready for Phase 3
+**Current focus:** Phase 4 -- Composition Modes
 
 ## Current Position
 
-Phase: 2 of 4 (Ensemble AI) -- COMPLETE
-Plan: 2 of 2 in current phase -- COMPLETE
-Status: Phase Complete
-Last activity: 2026-02-15 -- Completed 02-02-PLAN.md
+Phase: 4 of 4 (Composition Modes)
+Plan: 1 of 3 in current phase -- COMPLETE
+Status: In Progress
+Last activity: 2026-02-15 -- Completed 04-01-PLAN.md
 
-Progress: [################--] 83%
+Progress: [################--] 86%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
+- Total plans completed: 6
 - Average duration: 4min
-- Total execution time: 0.37 hours
+- Total execution time: 0.44 hours
 
 **By Phase:**
 
@@ -29,9 +29,10 @@ Progress: [################--] 83%
 |-------|-------|-------|----------|
 | 01-audio-engine-score-foundation | 3/3 | 16min | 5min |
 | 02-ensemble-ai | 2/2 | 5min | 2.5min |
+| 04-composition-modes | 1/3 | 4min | 4min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (4min), 01-02 (2min), 01-03 (10min), 02-01 (3min), 02-02 (2min)
+- Last 5 plans: 01-02 (2min), 01-03 (10min), 02-01 (3min), 02-02 (2min), 04-01 (4min)
 - Trend: Fast
 
 *Updated after each plan completion*
@@ -63,6 +64,10 @@ Recent decisions affecting current work:
 - [02-02]: Voice pool sized at 2x performer count (16 voices for 8 performers) for headroom
 - [02-02]: Global voice claim/release handles multi-performer contention naturally via voice stealing
 - [02-02]: Performer grid uses CSS opacity transitions for playing/silent/complete states
+- [04-01]: bandWidth formula Math.max(2, Math.min(5, Math.round(patterns.length * 0.06))) -- proportional to pattern count
+- [04-01]: enforceBand accepts bandWidth as parameter with default=3 for backward compatibility
+- [04-01]: Ensemble.scoreMode getter returns 'riley' as default -- mode switching deferred to Plan 03
+- [04-01]: Generative motif bank: 2-4 note fragments stored from 30% of patterns, reused via transpose/invert/retrograde
 
 ### Pending Todos
 
@@ -76,7 +81,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 02-02-PLAN.md (Ensemble-Audio integration: beat clock scheduler, 16-voice pool, per-performer UI grid)
+Stopped at: Completed 04-01-PLAN.md (Dynamic ensemble + generative pattern factory)
 Resume file: None
 
-**Phase 2 COMPLETE** - Full multi-performer In C performance with ensemble AI driving all musical decisions. Ready for Phase 3.
+**Phase 4 in progress** - Dynamic ensemble accepting any-length patterns. Generative factory complete. Next: euclidean patterns (04-02).
