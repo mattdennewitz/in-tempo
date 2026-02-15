@@ -1,11 +1,12 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { AudioEngine } from './audio/engine.ts';
 import type { PerformerState } from './audio/types.ts';
+import { TOTAL_PATTERNS } from './score/patterns.ts';
 import { Transport } from './components/Transport.tsx';
 import { BpmSlider } from './components/BpmSlider.tsx';
+import { PatternDisplay } from './components/PatternDisplay.tsx';
 import { ScoreModeSelector } from './components/ScoreModeSelector.tsx';
 import { PerformerControls } from './components/PerformerControls.tsx';
-import { PerformerCanvas } from './canvas/PerformerCanvas.tsx';
 import './App.css';
 
 function App() {
@@ -54,36 +55,30 @@ function App() {
   }, []);
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1 className="app-title">InTempo</h1>
-      </header>
-
-      <PerformerCanvas performers={performers} />
-
-      {ensembleComplete && (
-        <p style={{ color: '#E8735A', fontWeight: 500 }}>Performance Complete</p>
-      )}
-
-      <div className="controls-row">
-        <Transport
-          playing={playing}
-          onStart={handleStart}
-          onStop={handleStop}
-          onReset={handleReset}
-        />
-        <PerformerControls
-          onAdd={handleAddPerformer}
-          onRemove={handleRemovePerformer}
-          performers={performers}
-          disabled={!playing}
-        />
-        <BpmSlider
-          bpm={bpm}
-          onChange={handleBpmChange}
-        />
-        <ScoreModeSelector disabled={playing} />
-      </div>
+    <div className="flex flex-col items-center justify-center min-h-screen gap-8 p-8">
+      <PatternDisplay
+        performers={performers}
+        playing={playing}
+        ensembleComplete={ensembleComplete}
+        totalPatterns={TOTAL_PATTERNS}
+      />
+      <Transport
+        playing={playing}
+        onStart={handleStart}
+        onStop={handleStop}
+        onReset={handleReset}
+      />
+      <PerformerControls
+        onAdd={handleAddPerformer}
+        onRemove={handleRemovePerformer}
+        performers={performers}
+        disabled={!playing}
+      />
+      <BpmSlider
+        bpm={bpm}
+        onChange={handleBpmChange}
+      />
+      <ScoreModeSelector disabled={playing} />
     </div>
   );
 }

@@ -34,7 +34,7 @@ export const STATE_COLORS = {
   },
 } as const;
 
-export const FONT_STACK = "'GT Canon', Georgia, 'Times New Roman', serif";
+export const FONT_STACK = "'GT Canon Mono Trial', 'SF Mono', 'Menlo', 'Monaco', monospace";
 
 // Layout constants for performer grid
 export const CELL_WIDTH = 140;

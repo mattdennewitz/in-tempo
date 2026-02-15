@@ -40,8 +40,8 @@ export class SamplePlayer {
 
     // Wait for both instruments to finish loading samples
     await Promise.all([
-      this.piano.loaded(),
-      this.marimba.loaded(),
+      this.piano.load,
+      this.marimba.load,
     ]);
 
     this._isReady = true;

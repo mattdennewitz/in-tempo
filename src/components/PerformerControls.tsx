@@ -1,4 +1,5 @@
 import type { PerformerState } from '../audio/types.ts';
+import { Button } from '@/components/ui/button';
 
 const MIN_PERFORMERS = 2;
 const MAX_PERFORMERS = 16;
@@ -21,7 +22,6 @@ export function PerformerControls({
   const canRemove = !disabled && activePerformers.length > MIN_PERFORMERS;
 
   const handleRemove = () => {
-    // Remove the performer with the highest id that is not 'complete'
     const target = activePerformers.reduce<PerformerState | null>(
       (best, p) => (!best || p.id > best.id ? p : best),
       null,
@@ -32,24 +32,26 @@ export function PerformerControls({
   };
 
   return (
-    <div className="performer-controls">
-      <button
-        className="performer-btn performer-btn-remove"
+    <div className="flex items-center gap-1.5">
+      <Button
+        variant="outline"
+        size="icon-sm"
         onClick={handleRemove}
         disabled={!canRemove}
-        title="Remove performer"
       >
         -
-      </button>
-      <span className="performer-count">{activePerformers.length}</span>
-      <button
-        className="performer-btn performer-btn-add"
+      </Button>
+      <span className="text-sm text-muted-foreground min-w-[1.5rem] text-center tabular-nums">
+        {activePerformers.length}
+      </span>
+      <Button
+        variant="outline"
+        size="icon-sm"
         onClick={onAdd}
         disabled={!canAdd}
-        title="Add performer"
       >
         +
-      </button>
+      </Button>
     </div>
   );
 }
