@@ -27,12 +27,14 @@ The ensemble behavior must feel alive — performers making believable musical d
 - ✓ Canvas-based performer visualization — v1.0
 - ✓ Natural fade ending: performers drop out one by one — v1.0
 - ✓ Rock-solid Web Audio API timing (AudioContext lookahead scheduling) — v1.0
+- ✓ Per-note velocity humanization with personality, metric accents, and phrase contour — v1.1
+- ✓ Humanization UI toggle with subtle/moderate/expressive intensity — v1.1
+- ✓ Default 4 performers — v1.1
+- ✓ Multi-track MIDI export with per-performer tracks, GM instruments, tempo, and humanized velocities — v1.1
 
 ### Active
 
-- [ ] MIDI file export of generated performances (downloadable .mid)
-- [ ] Velocity humanization — subtle per-note velocity variation in audio and MIDI
-- [ ] Default performer count reduced to 4
+(None — start next milestone to define new requirements)
 
 ### Out of Scope
 
@@ -49,8 +51,8 @@ The ensemble behavior must feel alive — performers making believable musical d
 
 Terry Riley's "In C" (1964) is a seminal minimalist composition. 53 short melodic modules are played in sequence by any number of performers. The magic is in the simple rules: go in order, repeat freely, stay close to each other, listen and adjust. This produces emergent phasing, canonic textures, and dynamic waves without a conductor.
 
-Shipped v1.0 with 3,597 LOC TypeScript/TSX across 4 phases (11 plans).
-Tech stack: React 19, Vite, shadcn/ui, Tailwind CSS v4, Web Audio API (AudioWorklet), smplr for sampled instruments.
+Shipped v1.1 with 4,360 LOC TypeScript/TSX across 6 phases (16 plans).
+Tech stack: React 19, Vite, shadcn/ui, Tailwind CSS v4, Web Audio API (AudioWorklet), smplr for sampled instruments, midi-writer-js for MIDI export.
 
 ## Constraints
 
@@ -73,15 +75,17 @@ Tech stack: React 19, Vite, shadcn/ui, Tailwind CSS v4, Web Audio API (AudioWork
 | Deterministic instrument assignment | performerId % 3 gives stable, varied timbres without randomness | ✓ Good |
 | smplr for sampled instruments | CDN-loaded piano/marimba samples — no local audio files needed | ✓ Good |
 | Bjorklund/Euclidean for rhythms | Mathematically even onset distribution produces world-music-style rhythms | ✓ Good |
+| Multiplicative velocity model | Four layers (jitter, personality, accent, contour) multiply against base — floor at 0.3 prevents inaudible notes | ✓ Good |
+| Pattern-relative accent | noteIndexInPattern===0 rather than global beat counter — works across all score modes | ✓ Good |
+| velocityConfigRef pattern | Scheduler holds ref to config object — avoids constructor changes, hot-swappable | ✓ Good |
+| midi-writer-js for MIDI export | Lightweight library, velocity 1-100 scale, startTick absolute positioning | ✓ Good |
+| Passive MidiRecorder pattern | Recorder ref on Scheduler, same pattern as velocityConfigRef — no event system needed | ✓ Good |
+| Ghost note trimming | Filter events by beatIndex < stopBeat — eliminates lookahead artifacts in MIDI | ✓ Good |
 
-## Current Milestone: v1.1 MIDI
+## Shipped Milestones
 
-**Goal:** Add MIDI file export, velocity humanization, and default to 4 performers
-
-**Target features:**
-- Export performance as .mid file at any point (during or after playback)
-- Subtle per-note velocity variation in both audio playback and MIDI output
-- Default performer count of 4
+- **v1.0 MVP** — Audio engine, ensemble AI, visualization, 3 composition modes (shipped 2026-02-15)
+- **v1.1 MIDI** — Velocity humanization, MIDI export, default 4 performers (shipped 2026-02-15)
 
 ---
-*Last updated: 2026-02-15 after v1.1 milestone start*
+*Last updated: 2026-02-15 after v1.1 milestone complete*

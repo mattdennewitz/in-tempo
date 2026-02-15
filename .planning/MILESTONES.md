@@ -14,3 +14,20 @@
 
 ---
 
+
+## v1.1 MIDI (Shipped: 2026-02-15)
+
+**Phases completed:** 2 phases (5-6), 5 plans
+**Git range:** `c8d74ed` → `a5b35a0` (18 commits)
+**Files:** 34 changed, 3,448 lines added
+
+**Key accomplishments:**
+- Four-layer velocity model (jitter, personality, metric accent, phrase contour) making each performer dynamically distinct
+- Velocity piped through full audio chain — ensemble, scheduler, synth, and sampler all honor per-note velocity
+- Humanization UI toggle with subtle/moderate/expressive intensity presets
+- Passive MIDI recorder with integer beat counter capturing events during playback
+- Multi-track MIDI export with per-performer tracks, GM instruments, tempo, and humanized velocities
+- Default 4 performers for cleaner listening experience
+
+---
+
