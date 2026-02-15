@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { AudioEngine } from './audio/engine.ts';
+import type { PerformerState } from './audio/types.ts';
 import { TOTAL_PATTERNS } from './score/patterns.ts';
 import { Transport } from './components/Transport.tsx';
 import { BpmSlider } from './components/BpmSlider.tsx';
@@ -10,14 +11,16 @@ function App() {
   const engineRef = useRef<AudioEngine>(new AudioEngine());
 
   const [playing, setPlaying] = useState(false);
-  const [currentPattern, setCurrentPattern] = useState(1);
+  const [performers, setPerformers] = useState<PerformerState[]>([]);
+  const [ensembleComplete, setEnsembleComplete] = useState(false);
   const [bpm, setBpm] = useState(120);
 
   useEffect(() => {
     const engine = engineRef.current;
     engine.onStateChange = (state) => {
       setPlaying(state.playing);
-      setCurrentPattern(state.currentPattern);
+      setPerformers(state.performers);
+      setEnsembleComplete(state.ensembleComplete);
       setBpm(state.bpm);
     };
     return () => {
@@ -44,9 +47,10 @@ function App() {
   return (
     <div className="app">
       <PatternDisplay
-        currentPattern={currentPattern}
-        totalPatterns={TOTAL_PATTERNS}
+        performers={performers}
         playing={playing}
+        ensembleComplete={ensembleComplete}
+        totalPatterns={TOTAL_PATTERNS}
       />
       <Transport
         playing={playing}
