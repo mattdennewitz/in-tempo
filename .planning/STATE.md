@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 ## Current Position
 
 Phase: 5 of 6 (Velocity Humanization)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: Executing
-Last activity: 2026-02-15 -- Completed 05-01 velocity computation model
+Last activity: 2026-02-15 -- Completed 05-02 velocity pipeline integration
 
-Progress: [██░░░░░░░░] 17%
+Progress: [████░░░░░░] 33%
 
 ## Performance Metrics
 
@@ -27,7 +27,7 @@ Progress: [██░░░░░░░░] 17%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 5. Velocity | 1/3 | 1min | 1min |
+| 5. Velocity | 2/3 | 5min | 2.5min |
 | 6. MIDI Export | - | - | - |
 
 *Updated after each plan completion*
@@ -45,6 +45,9 @@ Recent decisions affecting current work:
 - [Research]: Parallel integer tick counter (PPQ=480) to prevent time drift in MIDI recording
 - [05-01]: Velocity floor at 0.3 to prevent inaudible notes from multiplicative stacking
 - [05-01]: Pattern-relative accent (noteIndexInPattern===0) rather than global beat counter
+- [05-02]: Velocity scales maxGain multiplicatively (preserves headroom)
+- [05-02]: velocityConfigRef pattern on Scheduler avoids constructor change
+- [05-02]: CFG-01 applied: default 4 performers in engine.ts and App.tsx
 
 ### Pending Todos
 
@@ -57,5 +60,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 05-01-PLAN.md (velocity computation model)
+Stopped at: Completed 05-02-PLAN.md (velocity pipeline integration)
 Resume file: None
