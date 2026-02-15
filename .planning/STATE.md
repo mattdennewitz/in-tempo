@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-14)
 ## Current Position
 
 Phase: 4 of 4 (Composition Modes)
-Plan: 2 of 3 in current phase -- COMPLETE
-Status: In Progress
-Last activity: 2026-02-15 -- Completed 04-02-PLAN.md
+Plan: 3 of 3 in current phase -- COMPLETE
+Status: Complete
+Last activity: 2026-02-15 -- Completed 04-03-PLAN.md
 
-Progress: [#################-] 93%
+Progress: [##################] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
+- Total plans completed: 8
 - Average duration: 4min
-- Total execution time: 0.47 hours
+- Total execution time: 0.50 hours
 
 **By Phase:**
 
@@ -29,10 +29,10 @@ Progress: [#################-] 93%
 |-------|-------|-------|----------|
 | 01-audio-engine-score-foundation | 3/3 | 16min | 5min |
 | 02-ensemble-ai | 2/2 | 5min | 2.5min |
-| 04-composition-modes | 2/3 | 6min | 3min |
+| 04-composition-modes | 3/3 | 8min | 2.7min |
 
 **Recent Trend:**
-- Last 5 plans: 01-03 (10min), 02-01 (3min), 02-02 (2min), 04-01 (4min), 04-02 (2min)
+- Last 5 plans: 02-01 (3min), 02-02 (2min), 04-01 (4min), 04-02 (2min), 04-03 (2min)
 - Trend: Fast
 
 *Updated after each plan completion*
@@ -72,6 +72,9 @@ Recent decisions affecting current work:
 - [04-02]: setScoreMode() preserves onStateChange callback across scheduler rebuild
 - [04-02]: No auto-restart after mode switch -- user must click Start
 - [04-02]: Interlocking complementary pairs via rhythm inversion at ~30% probability
+- [04-03]: ScoreModeSelector uses button cards with aria-pressed for accessibility
+- [04-03]: Mode badge as uppercase pill above performer grid during playback
+- [04-03]: totalPatterns and scoreMode sourced from engine state (not hardcoded)
 
 ### Pending Todos
 
@@ -85,7 +88,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 04-02-PLAN.md (Euclidean patterns + engine mode switching)
+Stopped at: Completed 04-03-PLAN.md (Score mode selector UI + enhanced performer cards)
 Resume file: None
 
-**Phase 4 in progress** - All three score modes wired and producing valid patterns. Mode switching API complete. Next: UI composition selector (04-03).
+**All phases complete.** Score mode selector UI wired, performer cards enhanced with rep/total tracking, mode badge visible during playback. All 4 phases delivered: audio engine, ensemble AI, composition modes (engine + UI).
