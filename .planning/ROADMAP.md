@@ -46,11 +46,11 @@
   2. The current seed is visible in the UI and can be copied to clipboard with one click
   3. User can enter a seed manually to replay a specific performance
   4. Pasting a shared URL into a browser auto-configures mode, BPM, performer count, and seed, then starts the same performance
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 07-01: TBD
-- [ ] 07-02: TBD
+- [ ] 07-01-PLAN.md — SeededRng class (Mulberry32) + replace all 32 Math.random() call sites
+- [ ] 07-02-PLAN.md — Wire RNG through AudioEngine, seed UI, URL hash sharing
 
 ### Phase 8: Microtiming
 **Goal**: Performances feel rhythmically organic with swing, rubato, and per-performer timing variation
@@ -105,7 +105,7 @@ Plans:
 | 4. Composition Modes | v1.0 | 3/3 | Complete | 2026-02-15 |
 | 5. Velocity Humanization | v1.1 | 3/3 | Complete | 2026-02-15 |
 | 6. MIDI Export | v1.1 | 2/2 | Complete | 2026-02-15 |
-| 7. Seeded PRNG | v1.2 | 0/TBD | Not started | - |
+| 7. Seeded PRNG | v1.2 | 0/2 | Planned | - |
 | 8. Microtiming | v1.2 | 0/TBD | Not started | - |
 | 9. Stereo Spread | v1.2 | 0/TBD | Not started | - |
 | 10. Pattern Visualization | v1.2 | 0/TBD | Not started | - |
