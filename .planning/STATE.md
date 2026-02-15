@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 ## Current Position
 
 Phase: 7 of 10 (Seeded PRNG)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-15 — v1.2 roadmap created (4 phases, 17 requirements)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-15 — Completed 07-01 (SeededRng + Math.random replacement)
 
-Progress: [██████████████░░░░░░] 70% (16/16 v1.0+v1.1 plans complete, 0/TBD v1.2)
+Progress: [██████████████░░░░░░] 70% (16/16 v1.0+v1.1 plans complete, 1/2 phase 7)
 
 ## Performance Metrics
 
@@ -45,7 +45,9 @@ All decisions logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 - v1.2: Seeded PRNG before microtiming (foundation for deterministic timing jitter)
 - v1.2: Mulberry32 hand-rolled PRNG, no npm dependency (15 lines, period 4B)
-- v1.2: Per-agent PRNG streams vs single stream TBD during Phase 7 planning
+- 07-01: Single PRNG stream shared across all agents (not per-agent streams)
+- 07-01: Module-level _rng pattern for generators, constructor injection for Ensemble
+- 07-01: All RNG params optional with Date.now() fallback (zero breaking changes)
 
 ### Pending Todos
 
@@ -60,5 +62,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: v1.2 roadmap created, ready to plan Phase 7
+Stopped at: Completed 07-01-PLAN.md (SeededRng class + all 32 Math.random replacements)
 Resume file: None
