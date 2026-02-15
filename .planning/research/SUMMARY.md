@@ -1,188 +1,242 @@
 # Project Research Summary
 
-**Project:** InTempo — MIDI Export & Velocity Humanization Milestone
-**Domain:** Browser-based generative music performance engine (Web Audio API)
+**Project:** InTempo v1.2 Polish Features
+**Domain:** Browser-based generative music performance engine with Web Audio API
 **Researched:** 2026-02-15
-**Confidence:** MEDIUM-HIGH
+**Confidence:** HIGH
 
 ## Executive Summary
 
-This research covers adding MIDI file export and velocity humanization to InTempo's existing generative performance engine. The core finding is that **velocity is a cross-cutting concern** requiring simultaneous changes across five architectural layers (Ensemble AI → Scheduler → AudioWorklet synth → smplr sampler → MIDI recorder). Partial implementation will create inconsistency between what users hear and what they export, making coordinated implementation essential.
+InTempo v1.2 adds four polish features to the existing generative performance engine: stereo spread, seeded deterministic replay (shareable performances), pattern visualization, and microtiming humanization. Research shows these features integrate cleanly with the existing AudioWorklet/scheduler/ensemble architecture with zero new npm dependencies. The recommended approach uses Web Audio's built-in StereoPannerNode for spatial positioning, hand-rolled Mulberry32 PRNG (15 lines) for deterministic replay, Canvas 2D API (already in codebase) for visualization, and scheduler timing offsets for microtiming.
 
-The recommended approach uses **midi-writer-js** (v3.1.1) for MIDI file generation paired with an in-house velocity humanization algorithm that layers personality-driven dynamics, metric accents, phrase contours, and micro-variations. The MIDI recorder should tap the Scheduler's event stream using a parallel integer tick counter to avoid floating-point time drift. With 4 default performers (down from 8), voice stealing becomes more common, making it critical that MIDI recording tracks event durations from the Ensemble, not from audio voice pool callbacks.
+The most critical risk is incomplete seeded PRNG replacement. With 30+ Math.random() call sites across ensemble, velocity, and score generators, missing even one breaks determinism silently. A comprehensive refactor with exhaustive testing is essential. The second major risk is microtiming offsets exceeding the 100ms lookahead window, causing dropped notes. Offsetting scheduled time (not the beat clock) and clamping to safe bounds prevents this.
 
-The biggest risk is **time conversion drift** (Pitfall 1): the Scheduler tracks time as floating-point `AudioContext.currentTime` while MIDI uses integer ticks. Over a 45-minute performance, cumulative rounding errors will shift notes off-grid in the exported file. This is prevented by maintaining a parallel integer tick counter from the start. The second major risk is the **midi-writer-js velocity scale mismatch** (Pitfall 3): the library uses 1-100 instead of MIDI's standard 0-127, requiring explicit conversion to preserve dynamic range.
+Build order must respect dependencies: seeded PRNG first (foundation for microtiming), then microtiming (extends PRNG), then stereo spread (independent audio graph change), finally pattern visualization (pure UI, zero audio dependencies). This minimizes integration complexity and isolates high-risk changes.
 
 ## Key Findings
 
 ### Recommended Stack
 
-**Single new dependency:** midi-writer-js v3.1.1 for MIDI file generation. This library was chosen over @tonejs/midi (bidirectional read/write when we only need write), jsmidgen (unmaintained since 2018), and JZZ.js (massive overkill for file generation). midi-writer-js speaks in musical durations natively (`'8'` for eighth note) which maps directly to InTempo's eighth-note beat clock, requires no Node.js polyfills, and is ~15KB.
+All v1.2 features use browser-native APIs and hand-rolled algorithms. Zero new npm dependencies required.
 
 **Core technologies:**
-- **midi-writer-js v3.1.1**: Generate Standard MIDI File (.mid) — purpose-built for writing, clean Track/NoteEvent API, zero dependencies
-- **In-house velocity algorithm**: Humanization with personality + metric accent + phrase contour — 30-50 lines of TypeScript, more appropriate than ML-based solutions for minimalist generative music
-- **Existing smplr library**: Already supports velocity 0-127 natively via `start({ velocity })` — no changes needed, just pass the parameter
+- **Mulberry32 PRNG (hand-rolled)**: Deterministic random for reproducible performances. 15 lines of TypeScript, no library needed. Period of 4 billion values far exceeds any performance duration. Base36 seed encoding produces compact 6-character shareable URLs.
+- **StereoPannerNode (Web Audio API)**: Per-performer stereo positioning. Native equal-power panning with -1 to +1 range. Baseline browser support since April 2021. Zero bundle cost.
+- **Canvas 2D API (existing)**: Pattern visualization via existing canvas infrastructure. No p5.js, Three.js, or D3.js needed. Canvas outperforms SVG for animated multi-performer displays.
+- **Scheduler timing math (existing)**: Microtiming via per-beat timing offsets. Pure arithmetic on nextNoteTime in the existing lookahead scheduler. No library or API needed.
 
-**Critical API detail:** midi-writer-js velocity range is 1-100 (not 0-127). Must map: `Math.round(velocity * 100 / 127)` before passing to NoteEvent.
+**What NOT to add:**
+- seedrandom / pure-rand — dependency overhead for 15 lines of trivial code
+- p5.js / Three.js / D3.js — 500KB+ libraries for 2D geometric visualization
+- PannerNode (3D audio) — 3D spatialization overkill for stereo spread
+- External tempo library — no library integrates with custom lookahead schedulers
 
 ### Expected Features
 
 **Must have (table stakes):**
-- Download as .mid file (Standard MIDI Format 1, multi-track)
-- One track per performer with correct tempo metadata
-- Velocity values on every note (1-127 MIDI range)
-- Track names identifying performers (e.g., "Performer 1 (Piano)")
-- Instrument program changes (General MIDI mapping)
-- Export available after stopping (buffer persists until reset)
-- Default 4 performers (trivial change from current 8)
+- **Per-performer pan position** — spatial separation for 4+ simultaneous voices, prevents mono center blob
+- **Same seed = same performance** — core promise of deterministic replay
+- **Visible seed display + copy/share** — enables shareability
+- **Visual note activity** — see WHEN a performer plays, not just pattern number
+- **Swing parameter** — universally understood timing humanization (50-67% triplet swing)
+- **Per-performer timing variation** — slight rush/drag offsets create ensemble feel
 
 **Should have (differentiators):**
-- Per-note velocity humanization with Gaussian-like distribution
-- Performer personality affects velocity curve (some naturally louder/softer)
-- Contextual velocity dynamics (pattern accents, density-responsive, re-entry energy)
-- Export during playback (snapshot mid-performance)
-- Descriptive filename (`intempo-riley-120bpm-4perf-2026-02-15.mid`)
+- **URL-encoded seed sharing** — seed + mode + BPM + performer count in query string, paste link to replay
+- **Abstract ensemble score view** — horizontal timeline showing all performers' pattern positions, reveals canonic phasing
+- **Performer color coding by instrument** — synth/piano/marimba distinct hues
+- **Rubato (tempo breathing)** — slow global tempo fluctuation, shared temporal elasticity
+- **Performer rush/drag personality** — some performers consistently early/late, chamber ensemble feel
 
-**Defer (anti-features for this milestone):**
-- Real-time MIDI output to hardware (Web MIDI API inconsistent, different feature)
-- MIDI import/load (contradicts generative premise)
-- WAV/MP3 audio export (MediaRecorder quality issues, much harder than MIDI)
-- Configurable humanization amount (bake in good defaults first)
-- MIDI CC data (sustain, mod wheel) — note on/off only
+**Defer (v2+):**
+- 3D spatial audio (PannerNode/HRTF) — overkill for 4-16 performers, inaudible on laptop speakers
+- User-adjustable per-performer pan sliders — breaks "spectator only" design philosophy
+- Backend/database for seed storage — URL query strings achieve shareability with zero infrastructure
+- Real-time waveform/spectrum visualization — doesn't communicate ensemble structure
+- MIDI-synchronized video export — enormous scope, niche use case
 
 ### Architecture Approach
 
-The architecture centers on three new components integrated into the existing scheduler-based event flow. **VelocityHumanizer** generates per-note velocity at the Ensemble/Agent level using personality profiles. **MidiRecorder** passively observes the Scheduler's event stream (observer/tap pattern) without affecting audio timing. **MidiExporter** converts the accumulated recording buffer to Standard MIDI File format via midi-writer-js on export.
+All four features integrate into the existing three-layer architecture (Ensemble -> Scheduler -> Audio Graph) with minimal coupling. Seeded PRNG flows through dependency injection (Ensemble creates it, passes to agents and score generators). Stereo spread uses per-performer StereoPannerNode chains inserted between voice/sample output and destination. Pattern visualization is read-only, consuming existing EnsembleEngineState with no audio path modifications. Microtiming applies timing offsets at the Scheduler level when converting beat indices to AudioContext time.
 
 **Major components:**
-1. **VelocityHumanizer** (`src/audio/velocity.ts`) — Computes velocity from personality profile + beat position + ensemble density + entry fade-in; called by PerformerAgent during tick()
-2. **MidiRecorder** (`src/audio/midi-recorder.ts`) — Accumulates timestamped events with parallel integer tick counter; fed by Scheduler.scheduleBeat(), read by MidiExporter
-3. **MidiExporter** (`src/audio/midi-exporter.ts`) — Groups events by performer into multi-track MIDI file; handles tempo meta-events, track naming, instrument program changes, browser download
 
-**Key integration points:**
-- Extend `AgentNoteEvent` with `velocity: number` field (single source of truth)
-- Flow velocity through five layers simultaneously: Ensemble → Scheduler → AudioWorklet (maxGain scaling) → SamplePlayer (smplr velocity) → MidiRecorder
-- Record in Scheduler.scheduleBeat() where all data converges (events, timing, BPM, instrument assignment)
-- Use integer tick counter parallel to AudioContext.currentTime to prevent drift
+1. **StereoField (NEW)** — Manages per-performer gain+pan chains. Each performer gets a StereoPannerNode with deterministic pan position based on ID. VoicePool voices connect/disconnect per-note at claim time. SamplePlayer creates per-performer instrument instances routed through performer channels.
 
-**Critical architectural decision:** Velocity originates at Ensemble/Agent level (musical decision tied to personality), not Scheduler level (audio-routing decision). This ensures both audio playback and MIDI export use the same velocity values.
+2. **Seeded PRNG (NEW)** — Mulberry32 function lives in src/score/prng.ts. Ensemble constructor receives optional seed, creates PRNG, passes to all agents. ALL Math.random() calls in ensemble.ts, velocity.ts, generative.ts, euclidean.ts replaced with this.random(). URL encode/decode in src/score/seed-config.ts serializes seed + mode + BPM + performer count.
+
+3. **Microtiming personality (EXTEND)** — Add timingBias (-1 to +1) and timingVariance (0 to 1) to AgentPersonality. Add timingOffset to AgentNoteEvent. Scheduler applies offset to scheduled note time (not beat clock). Shares humanization toggle with existing velocity system.
+
+4. **Pattern visualization (EXTEND)** — Extend existing PerformerCanvas with repetition progress arc and note-on flash. Add ScoreOverview component (new Canvas 2D) showing horizontal pattern timeline with performer markers. Both render read-only state via existing rAF loop, no audio coupling.
+
+**Critical patterns:**
+- **Dependency injection for testability** — Pass random() as constructor parameter with Math.random default. Tests inject fixed-sequence PRNG.
+- **Audio graph late-bound connections** — VoicePool voices created unconnected. Scheduler connects to per-performer pan chain at claim time, disconnects at release.
+- **Normalized-then-scale for physical parameters** — Timing offset and pan stored as -1 to +1. Conversion to milliseconds/StereoPannerNode values happens at boundary.
+- **Read-only visualization** — Visualization only reads EnsembleEngineState, never writes back.
 
 ### Critical Pitfalls
 
-1. **AudioContext Time to MIDI Tick Conversion Drift** — Floating-point `currentTime` accumulates rounding errors over long performances; converted to integer MIDI ticks, this creates audible timing drift. **Prevention:** Maintain parallel integer tick counter (PPQ=480) incremented by fixed amounts, never derive MIDI ticks from AudioContext seconds.
+1. **Incomplete seeded PRNG replacement (CRITICAL)** — With 30+ Math.random() call sites across 5 files, missing even one breaks determinism silently. Performances start identical, diverge unpredictably. MUST use grep to find ALL call sites, replace ALL, and write determinism test asserting byte-for-byte identical event sequences across runs.
 
-2. **Velocity Has No Path Through Architecture** — Current `AgentNoteEvent` lacks velocity field; synth maxGain is hardcoded; SamplePlayer doesn't pass velocity to smplr. Partial implementation creates mismatch between audio and MIDI. **Prevention:** Add velocity to AgentNoteEvent and flow through all five layers (Ensemble, Scheduler, synth worklet, sampler, MIDI recorder) simultaneously in one milestone.
+2. **Microtiming offsets exceed lookahead window (CRITICAL)** — 100ms lookahead window is tight. +20ms offset on note at currentTime + 95ms pushes it beyond window, causing dropped notes. MUST clamp offsets to stay within window. Apply offset to scheduled note time (NOT nextNoteTime beat clock). Keep max offset small (10-15ms). Never modify nextNoteTime with microtiming.
 
-3. **midi-writer-js Velocity Scale Mismatch** — Library uses 1-100 range, not MIDI standard 0-127. Passing raw MIDI velocity compresses dynamics into top 20% of range. **Prevention:** Map velocity before passing: `Math.round((velocity / 127) * 100)`. Test with known velocity values and verify via hex editor.
+3. **StereoPannerNode not following voice reuse (HIGH)** — Voice pool reuses nodes across performers. Pan value set at pool creation time means voice 2 plays performer 3's note at performer 0's pan position. MUST set pan at claim time via voice.panner.pan.setValueAtTime(panValue, time), not at pool creation. Pan assignment is per-claim, not per-slot.
 
-4. **Recording Notes Never Heard (Lookahead Ghost Notes)** — Scheduler pre-schedules notes 100ms ahead; on stop, already-scheduled notes play but may/may not be in MIDI file depending on timing. **Prevention:** Record at scheduling time with session ID; on stop, record exact AudioContext time and trim notes scheduled after stop time.
+4. **PRNG call order diverges with performer count (HIGH)** — 3 performers consume different PRNG sequence than 5 performers. Seed URLs MUST encode all parameters (seed + mode + BPM + performer count) to be reproducible. Alternative: per-agent PRNG streams derived from master seed + agent ID.
 
-5. **Voice Stealing Creates Overlapping MIDI Notes** — VoicePool steals oldest voice when all busy; stolen note's duration in MIDI will be wrong if recorder couples to voice pool callbacks instead of event durations. **Prevention:** Record durations from Ensemble event.duration field (authoritative), not from audio voice pool state.
+5. **Pattern generation not seeded (MODERATE)** — generateGenerativePatterns() and generateEuclideanPatterns() use Math.random(). Even if ensemble is seeded, underlying patterns differ on each run. MUST seed PRNG BEFORE pattern generation, pass to generators, continue same sequence to Ensemble.
 
 ## Implications for Roadmap
 
-Based on research, suggested phase structure follows dependency chain:
+Based on research, suggested phase structure:
 
-### Phase 1: Velocity Humanization Foundation
-**Rationale:** Velocity must exist before MIDI recording can capture it. Zero external dependencies, additive changes to existing types. Implements the VelocityProfile/computeVelocity algorithm and adds velocity field to AgentNoteEvent.
-**Delivers:** Per-note velocity values with musical humanization (personality + metric accent + phrase contour + jitter)
-**Addresses:** Must-have velocity on every note; differentiator of personality-driven dynamics
-**Avoids:** Pitfall 2 (no velocity path) by implementing across all five layers simultaneously
-**Research needed:** None — standard pattern, in-house algorithm
+### Phase 1: Seeded PRNG Foundation
+**Rationale:** Seeded PRNG is the foundation for deterministic performances. Microtiming depends on it (timing jitter must be seeded). Must be comprehensive (all-or-nothing) to avoid silent failures. Build this first before anything that consumes the PRNG.
 
-### Phase 2: Velocity Audio Integration
-**Rationale:** Depends on Phase 1 (velocity values exist). Makes velocity audible for testing/validation before MIDI export. Required changes isolated to audio layer.
-**Delivers:** Velocity affects audio playback (synth maxGain scaling, smplr velocity parameter)
-**Uses:** Existing smplr velocity support (0-127 native), modified synth-processor.js
-**Implements:** Audio propagation through Scheduler → AudioWorklet/SamplePlayer
-**Avoids:** Pitfall 7 (synth processor clicks) via separate velocityGain field with ramped transitions; Pitfall 12 (gain staging breaks) via master gain re-tuning
-**Research needed:** None — modifications to existing components
+**Delivers:** Shareable seed URLs, identical performances across runs, foundation for microtiming
 
-### Phase 3: MIDI Recording Infrastructure
-**Rationale:** Depends on Phase 1 (velocity in events). Independent of Phase 2 (recording doesn't need audio to work). Must implement parallel tick counter from the start to avoid Pitfall 1.
-**Delivers:** Passive event recording with integer tick timeline, session management (start/stop/reset)
-**Addresses:** Must-have MIDI export foundation
-**Implements:** MidiRecorder class, Scheduler integration hook
-**Avoids:** Pitfall 1 (time drift) via parallel integer tick counter at PPQ=480; Pitfall 4 (ghost notes) via stop-time trimming; Pitfall 5 (voice stealing durations) by recording from event stream not audio callbacks
-**Research needed:** None — observer pattern, well-understood approach
+**Addresses:**
+- Same seed = same performance (FEATURES.md table stakes)
+- Visible seed display + copy/share (table stakes)
+- URL-encoded seed sharing (differentiator)
 
-### Phase 4: MIDI File Export
-**Rationale:** Depends on Phase 3 (recorded events exist). This is the user-facing output. Requires midi-writer-js integration and careful handling of velocity scale mismatch.
-**Delivers:** Multi-track MIDI file download with tempo metadata, track names, instrument mapping
-**Uses:** midi-writer-js v3.1.1, descriptive filename generation
-**Addresses:** Must-have .mid file download, track-per-performer, tempo/instrument metadata
-**Avoids:** Pitfall 3 (velocity scale) via explicit 0-127 to 1-100 mapping; Pitfall 8 (no tempo event) via setTempo at tick 0; Pitfall 9 (channel 10 drums) by mapping performers to tracks not channels
-**Research needed:** None — library integration with known API quirks
+**Avoids:** Pitfall 2 (incomplete replacement), Pitfall 4 (call order divergence), Pitfall 9 (pattern generation not seeded)
 
-### Phase 5: Default 4 Performers
-**Rationale:** Trivially independent, can run parallel with any phase. One-line change in AudioEngine.initialPerformerCount with verification.
-**Delivers:** Better default listener experience (less chaotic, more intelligible)
-**Addresses:** Milestone requirement for default 4 performers
-**Avoids:** No pitfalls — simple configuration change
-**Research needed:** None
+**Implementation:**
+1. Create src/score/prng.ts with Mulberry32 + randomSeed
+2. Replace ALL Math.random() in ensemble.ts, velocity.ts, generative.ts, euclidean.ts
+3. Thread random() through Ensemble -> agents -> score generators
+4. Create seed-config.ts for URL encode/decode
+5. Update App.tsx to read/write URL hash
+6. Write determinism test (100 ticks, same seed, assert identical events)
+
+**Research flag:** Standard patterns (PRNG well-documented, skip research-phase)
+
+### Phase 2: Microtiming Humanization
+**Rationale:** Extends seeded PRNG (uses random() for timing jitter). Small focused change completing the "humanization" feature set alongside existing velocity. Must be built after PRNG to ensure deterministic microtiming.
+
+**Delivers:** Swing, per-performer rush/drag personality, optional rubato, shared humanization toggle
+
+**Addresses:**
+- Swing parameter (FEATURES.md table stakes)
+- Per-performer timing variation (table stakes)
+- Rubato tempo breathing (differentiator)
+- Performer rush/drag personality (differentiator)
+
+**Avoids:** Pitfall 3 (offsets exceed lookahead), Pitfall 8 (synth vs sampler precision)
+
+**Implementation:**
+1. Add timingBias/timingVariance to AgentPersonality
+2. Add timingOffset to AgentNoteEvent
+3. Implement computeMicrotiming() in PerformerAgent using seeded random()
+4. Modify Scheduler.scheduleBeat() to apply timing offset (clamped to safe bounds)
+5. Add timing config to HumanizationConfig
+6. Update HumanizationToggle UI
+
+**Research flag:** Standard patterns (swing well-documented, skip research-phase)
+
+### Phase 3: Stereo Spread
+**Rationale:** Independent of PRNG/microtiming. Requires careful audio graph work with higher risk of audio glitches. Isolate this change to dedicated testing phase. Build after core features to avoid cascading rework.
+
+**Delivers:** Per-performer spatial positioning, even stereo distribution, deterministic pan assignment
+
+**Addresses:**
+- Per-performer pan position (FEATURES.md table stakes)
+- Deterministic pan assignment (table stakes)
+- Even stereo distribution (table stakes)
+
+**Avoids:** Pitfall 1 (pan not following voice reuse), Pitfall 7 (dispose/resize graph leaks), Pitfall 10 (dynamic add/remove breaks spread)
+
+**Implementation:**
+1. Create src/audio/stereo-field.ts
+2. Modify VoicePool: voices start unconnected
+3. Modify Scheduler: connect/disconnect voices through StereoField per-note
+4. Modify SamplePlayer: per-performer instrument instances with StereoField routing
+5. Modify Engine: create StereoField, update spread on performer count changes
+6. Add CC#10 (Pan) to MIDI export for DAW compatibility
+
+**Research flag:** Needs phase research (audio graph modifications, edge cases in voice stealing)
+
+### Phase 4: Pattern Visualization
+**Rationale:** Pure UI, zero audio dependencies. Can be built in parallel with anything but most meaningful after musical features are in place. Lowest risk, can be shipped independently.
+
+**Delivers:** Note activity indicators, repetition progress arcs, score overview timeline
+
+**Addresses:**
+- Visual note activity (FEATURES.md table stakes)
+- Pattern progress (table stakes)
+- Abstract ensemble score view (differentiator)
+- Performer color coding (differentiator)
+
+**Avoids:** Pitfall 6 (two rAF loops competing), Pitfall 11 (rendering scales with pattern length)
+
+**Implementation:**
+1. Add lastNoteOnBeat to PerformerState, beatCounter to EnsembleEngineState
+2. Create src/canvas/score-renderer.ts (pure draw functions)
+3. Create src/canvas/ScoreOverview.tsx (React wrapper)
+4. Enhance src/canvas/renderer.ts with repetition arc + note-on flash
+5. Add ScoreOverview to App.tsx layout
+6. Use single rAF loop with dirty-checking
+
+**Research flag:** Standard patterns (Canvas 2D well-documented, skip research-phase)
 
 ### Phase Ordering Rationale
 
-- **Velocity before MIDI recording** because the recorder needs velocity values to exist in AgentNoteEvent
-- **Audio integration before MIDI export** so velocity can be validated audibly before committing to file format
-- **MIDI infrastructure before export** because exporter reads from recorder's accumulated buffer
-- **All five velocity layers simultaneously** to prevent audio/MIDI mismatch (Pitfall 2)
-- **Integer tick counter from day one** because retrofitting time conversion is architecturally disruptive (Pitfall 1)
+- **PRNG must come first:** Microtiming depends on it for deterministic timing jitter. Pattern generation (generative/euclidean modes) must be seeded before ensemble creation. This is the foundation for all randomness.
 
-Dependencies form a clear chain: Phase 1 → Phase 2 (uses velocity), Phase 1 → Phase 3 (records velocity) → Phase 4 (exports recording). Phase 5 is independent.
+- **Microtiming after PRNG:** Uses the same random() stream. Small change extending existing humanization system. Must clamp offsets to respect 100ms lookahead constraint.
+
+- **Stereo spread independent:** No dependency on PRNG/microtiming. High-risk audio graph work isolated to dedicated phase. Voice pool connection/disconnection per-note requires careful edge case handling.
+
+- **Visualization last:** Zero coupling to audio path. Pure UI additive feature. Can be deferred or shipped separately. Lowest implementation risk.
 
 ### Research Flags
 
-**Phases with standard patterns (skip research-phase):**
-- **Phase 1 (Velocity Foundation):** In-house algorithm, extends existing personality system following established patterns
-- **Phase 2 (Audio Integration):** Modifications to existing components (scheduler, sampler, synth-processor) with clear integration points
-- **Phase 3 (Recording):** Observer pattern, well-documented approach for event capture
-- **Phase 4 (Export):** Library integration with verified API (midi-writer-js), known quirks documented in PITFALLS.md
-- **Phase 5 (Default 4):** Configuration change
+Phases needing deeper research during planning:
+- **Phase 3 (Stereo spread):** Audio graph edge cases in voice stealing, per-performer instrument instances vs routing, dispose/resize graph management
 
-**No phases need deeper research** — all patterns are well-understood, library API is verified, integration points are clear from codebase analysis.
+Phases with standard patterns (skip research-phase):
+- **Phase 1 (Seeded PRNG):** PRNG algorithms well-documented, dependency injection pattern established
+- **Phase 2 (Microtiming):** Swing/rubato patterns well-documented in music production, scheduler timing math straightforward
+- **Phase 4 (Visualization):** Canvas 2D rendering well-documented, existing infrastructure in codebase
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | midi-writer-js API verified via npm + GitHub, smplr velocity support confirmed from type definitions, existing codebase analyzed directly |
-| Features | MEDIUM-HIGH | MidiWriterJS capabilities verified, velocity humanization patterns well-documented in production music literature, table stakes identified from DAW import expectations |
-| Architecture | HIGH | All integration points identified via direct codebase analysis (scheduler.ts, ensemble.ts, voice-pool.ts, sampler.ts, synth-processor.js), clear component boundaries |
-| Pitfalls | MEDIUM-HIGH | Time drift and velocity scale mismatch verified from library docs + MIDI spec, voice stealing behavior confirmed from voice-pool.ts source, lookahead timing analyzed from scheduler |
+| Stack | HIGH | All technologies verified via MDN/npm. Existing codebase analysis confirms integration points. Zero new dependencies needed. |
+| Features | HIGH | Table stakes identified via codebase needs (existing mono/quantized limitations). Differentiators based on generative music app patterns. |
+| Architecture | HIGH | Direct codebase analysis of engine.ts, scheduler.ts, ensemble.ts, voice-pool.ts. Integration points clearly defined. Patterns proven in existing code. |
+| Pitfalls | HIGH | Critical pitfalls derived from codebase analysis (30+ Math.random call sites counted). Lookahead window constraint measured (100ms). Voice reuse pattern verified. |
 
-**Overall confidence:** MEDIUM-HIGH
+**Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **midi-writer-js velocity scale (1-100 vs 0-127):** Research confirms the mismatch. Mitigation is clear (explicit mapping function) but should be validated with hex editor inspection of first exported MIDI file to verify correct velocity bytes.
+- **smplr per-note destination routing:** STACK.md notes smplr's start() may not support per-note destination override. Need to verify during Phase 3 implementation. Fallback: per-performer instrument instances (acceptable memory cost).
 
-- **Synth processor velocity clicks:** Pitfall 7 describes the risk but exact implementation depends on synth-processor.js envelope behavior during voice stealing. May require iteration during Phase 2 to tune the velocityGain ramp timing.
+- **Microtiming precision difference between synth and sampler:** Web Audio quantizes to audio buffer boundaries (128 samples = ~2.9ms at 44.1kHz). Synth worklet has sample-accurate timing. Difference may be perceptible. Test during Phase 2, accept sub-block quantization if below perceptual threshold.
 
-- **Optimal PPQ value:** Research suggests 480 (industry standard) but InTempo's eighth-note resolution could work with lower values (e.g., 240). Should be decided during Phase 3 based on whether triplet or dotted note patterns emerge from generative scores.
+- **Pan position assignment for dynamic add/remove:** Pitfall 10 notes ambiguity in redistributing pan on performer count change. Use ID-based (not count-based) assignment: pan = ((id * GOLDEN_RATIO) % 1.0) * 2 - 1. Decide during Phase 3 planning.
 
-- **Gaussian random implementation:** Box-Muller transform suggested but simpler approximation (sum of 3-5 uniform randoms) may be sufficient for audible humanization. Can be validated with A/B testing during Phase 1.
+- **PRNG stream strategy:** Pitfall 4 notes single-stream vs per-agent-stream tradeoff. Single stream simpler but performer-count-sensitive. Per-agent streams robust but complex. Decide during Phase 1 planning based on shareable URL UX preference.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- InTempo codebase analysis: `scheduler.ts`, `voice-pool.ts`, `engine.ts`, `ensemble.ts`, `sampler.ts`, `synth-processor.js`, `src/audio/types.ts` — direct code reading of integration points, current event flow, existing personality system
-- smplr type definitions at `node_modules/smplr/dist/index.d.ts` — verified `SampleStart` accepts `velocity?: number` (0-127 range)
-- [MidiWriterJS GitHub](https://github.com/grimmdude/MidiWriterJS) — API documentation, NoteEvent velocity 1-100 range, Writer.buildFile() returns Uint8Array, TypeScript source
-- [MidiWriterJS npm](https://www.npmjs.com/package/midi-writer-js) — v3.1.1 latest, weekly downloads ~1.5K, actively maintained
+- InTempo codebase analysis — engine.ts, scheduler.ts, ensemble.ts, voice-pool.ts, sampler.ts, velocity.ts, generative.ts, euclidean.ts, renderer.ts (direct code review, 30+ Math.random call sites counted, 100ms lookahead verified)
+- [StereoPannerNode - MDN](https://developer.mozilla.org/en-US/docs/Web/API/StereoPannerNode) — pan property -1 to +1, equal-power algorithm, baseline support April 2021
+- [Web Audio scheduling - web.dev](https://web.dev/articles/audio-scheduling) — lookahead scheduling pattern, AudioContext.currentTime precision
+- [Web Audio scheduling - IRCAM](https://ircam-ismm.github.io/webaudio-tutorials/scheduling/timing-and-scheduling.html) — schedule-ahead pattern, setTimeout + AudioContext coordination
+- [Mulberry32 PRNG reference](https://gist.github.com/tommyettinger/46a874533244883189143505d203312c) — 32-bit seeded PRNG, period ~2^32, 15 lines
 
 ### Secondary (MEDIUM confidence)
-- [Standard MIDI File Format spec](https://midimusic.github.io/tech/midispec.html) — Format 1 structure, tempo meta-events, velocity 0-127 range, PPQ timing
-- [Production Music Live - Humanize Your Tracks](https://www.productionmusiclive.com/blogs/news/6-ways-to-humanize-your-tracks) — Velocity randomization at 10-20% range for subtle humanization
-- [Music Sequencing - Humanize MIDI](https://www.musicsequencing.com/article/humanize-midi/) — Layered humanization approaches (metric accent + phrase shape + jitter)
-- [Ableton - Understanding MIDI Files](https://help.ableton.com/hc/en-us/articles/209068169-Understanding-MIDI-files) — Track naming expectations, Format 1 for DAW import
-- [MDN AudioWorklet documentation](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Using_AudioWorklet) — postMessage for parameter passing to worklet
-- [@tonejs/midi GitHub](https://github.com/Tonejs/Midi) — Evaluated and rejected (bidirectional read/write, time-based API not musical duration)
-
-### Tertiary (LOW confidence)
-- [MIDI timing/PPQN reference](http://midi.teragonaudio.com/tech/midifile/ppqn.htm) — Integer tick rounding issues in long performances (described theoretically, not empirically tested)
-- [Best Practices for Sharing MIDI Files Between DAWs](https://www.macprovideo.com/article/fl-studio/best-practices-for-sharing-midi-files-between-daws) — File naming conventions, instrument mapping for compatibility
+- [smplr GitHub](https://github.com/danigb/smplr) — destination option accepts AudioNode (confirmed via docs, needs runtime verification)
+- [seedrandom - npm](https://www.npmjs.com/package/seedrandom) — evaluated, rejected for ESM fragmentation
+- [pure-rand - npm](https://www.npmjs.com/package/pure-rand) — evaluated, rejected for functional API impedance mismatch
+- [Microtiming in music - PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC4542135/) — 5-20ms timing deviations create groove (academic source)
+- [BeepBox](https://www.beepbox.co/) — precedent for URL hash containing all performance state
 
 ---
 *Research completed: 2026-02-15*

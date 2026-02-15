@@ -1,155 +1,226 @@
-# Technology Stack: MIDI Export & Velocity Humanization
+# Technology Stack: v1.2 Polish Features
 
 **Project:** InTempo -- Browser-Based Generative Performance Engine
 **Researched:** 2026-02-15
-**Scope:** New capabilities only -- MIDI file export, velocity humanization, default 4 performers
+**Scope:** Stereo spread, seeded PRNG (shareable performances), pattern visualization, microtiming (swing/rubato)
 
 ## Existing Stack (validated, not re-researched)
 
-React 19 + Vite 7 + TypeScript 5.9 + Tailwind CSS v4 + shadcn/ui, Web Audio API with AudioWorklet, smplr ^0.16.4 for sampled instruments (SplendidGrandPiano + Soundfont marimba), lookahead scheduler with eighth-note beat clock, VoicePool with voice stealing, Ensemble AI with PerformerAgent weighted decisions.
+React 19 + Vite 7 + TypeScript 5.9 + Tailwind CSS v4 + shadcn/ui, Web Audio API with AudioWorklet, smplr ^0.16.4 for sampled instruments, midi-writer-js ^3.1.1 for MIDI export, Canvas 2D performer grid, four-layer velocity humanization, lookahead scheduler with eighth-note beat clock, VoicePool with voice stealing.
 
 ---
 
 ## New Dependencies
 
-### MIDI File Generation
+### Seeded PRNG: Zero-Dependency Mulberry32
 
 | Technology | Version | Purpose | Why | Confidence |
 |------------|---------|---------|-----|------------|
-| midi-writer-js | ^3.1.1 | Generate Standard MIDI File (.mid) for export | Purpose-built for MIDI file *writing* (not parsing). Clean API: Track, NoteEvent with velocity/pitch/duration, Writer outputs Uint8Array. Zero dependencies. TypeScript source (compiled from TS). Browser-native, no Node.js polyfills needed. | HIGH |
+| Mulberry32 (hand-rolled) | N/A | Deterministic random number generation for reproducible performances | ~15 lines of TypeScript. No library needed. Mulberry32 is a proven 32-bit PRNG with good statistical quality for game/music applications. Period of ~4 billion -- far more than InTempo will ever consume in a single performance. Avoids adding a dependency for what is fundamentally a hash function. | HIGH |
 
-#### Why midi-writer-js over alternatives
+**Why not a library:**
 
-**@tonejs/midi (rejected):** Bidirectional read/write library. InTempo only needs write. @tonejs/midi depends on `midi-file` internally, adding unnecessary parsing code. Its API is time-based (seconds) rather than musical (beats/ticks), requiring manual tempo-to-time conversion. midi-writer-js speaks in musical durations natively (`'8'` for eighth note, `'4'` for quarter) which maps directly to InTempo's eighth-note beat clock.
+| Library | Why Rejected |
+|---------|-------------|
+| seedrandom (3.0.5) | CommonJS-first. Requires `@types/seedrandom` separately. Last updated years ago. The ESM story is fragmented across forks (esm-seedrandom, ts-seedrandom). For ~15 lines of code, a dependency adds more complexity than it removes. |
+| esm-seedrandom | Fork of seedrandom ported to ESM. Low adoption. Adds a dependency for a trivial algorithm. |
+| pure-rand (6.0.0) | Excellent library (TypeScript-native, immutable API, multiple algorithms). But its functional style (`[value, nextRng] = rng.next()`) is a poor fit for InTempo's imperative `Math.random()` call sites. Refactoring ~40 call sites to thread immutable state would be high-churn for no musical benefit. Overkill. |
 
-**jsmidgen (rejected):** Unmaintained (last commit 2018). No TypeScript types. String-based output requires conversion.
-
-**JZZ.js (rejected):** Full MIDI stack (hardware I/O, Web MIDI API, real-time). Massive overkill for file generation. ~100KB+ bundle.
-
-**Raw MIDI binary (rejected):** SMF is a well-specified binary format but writing it manually means reimplementing chunk headers, variable-length quantities, running status, and track termination. midi-writer-js is ~15KB and handles all of this correctly. Not worth hand-rolling.
-
-#### midi-writer-js API mapping to InTempo
+**Implementation (complete):**
 
 ```typescript
-import MidiWriter from 'midi-writer-js';
+// src/lib/prng.ts -- ~15 lines
 
-// One Track per performer (maps to PerformerAgent)
-const track = new MidiWriter.Track();
-track.setTempo(120); // from scheduler._bpm
+export function createPRNG(seed: number): () => number {
+  let state = seed | 0;
+  return () => {
+    state = (state + 0x6D2B79F5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
-// NoteEvent maps directly from AgentNoteEvent
-new MidiWriter.NoteEvent({
-  pitch: 60,           // from event.midi (MIDI note number)
-  duration: 'd8',      // 'd8' = dotted eighth, '8' = eighth note
-  velocity: 80,        // from humanized velocity (1-100 range)
-  channel: 1,          // performer channel assignment
-});
-
-// Export: Writer accepts array of tracks (multi-track Type 1 MIDI)
-const writer = new MidiWriter.Writer([track1, track2, track3, track4]);
-const blob = new Blob([writer.buildFile()], { type: 'audio/midi' });
+// Usage: drop-in Math.random() replacement
+const rng = createPRNG(12345);
+rng(); // 0.xxxxx -- always the same sequence for seed 12345
 ```
 
-**Key detail:** midi-writer-js velocity range is 1-100 (not 0-127). The library internally scales to MIDI's 0-127 range. This is a design choice, not a bug. Map InTempo's 0-127 velocity to 1-100 via `Math.round(velocity * 100 / 127)`.
+**Seed encoding for shareable URLs:** Use a 6-character base36 string in URL search params (`?seed=abc123`). Decode to integer via `parseInt(seed, 36)`. This gives ~2.1 billion unique seeds in a compact, URL-safe format. No additional library needed.
+
+```typescript
+// Encode: Math.floor(Math.random() * 2_147_483_647).toString(36) -> "1a2b3c"
+// Decode: parseInt("1a2b3c", 36) -> number
+// URL:    https://intempo.app/?seed=1a2b3c&mode=riley&bpm=120&performers=6
+```
 
 ### No Other New Dependencies Required
 
-Velocity humanization and the default-4-performers change require zero new libraries. Both are algorithmic changes to existing code.
+Stereo spread, pattern visualization, and microtiming are all built on Web APIs and patterns already in the codebase. Zero new npm packages.
 
 ---
 
-## Integration Points with Existing Code
+## Feature-by-Feature Stack Decisions
 
-### 1. Velocity: AgentNoteEvent needs a `velocity` field
+### 1. Stereo Spread: Web Audio StereoPannerNode (built-in)
 
-**Current state:** `AgentNoteEvent` has `{ performerId, midi, duration }`. No velocity.
+| Technology | Version | Purpose | Why | Confidence |
+|------------|---------|---------|-----|------------|
+| StereoPannerNode | Web Audio API (baseline since April 2021) | Per-performer stereo positioning | Native browser API. Equal-power panning algorithm built in. `pan` AudioParam supports a-rate automation (smooth panning transitions). Range -1 (left) to +1 (right). Zero bundle cost. | HIGH |
 
-**Change:** Add `velocity: number` (0-127, MIDI standard) to `AgentNoteEvent` in `src/audio/types.ts`.
+**Integration with existing audio graph:**
 
-**Upstream (Ensemble/PerformerAgent):** The `PerformerAgent.tick()` method returns `AgentNoteEvent`. Velocity must be computed here, per-performer, using the humanization algorithm. Each performer's `AgentPersonality` should gain a `velocityBias` and `velocityVariance` to create per-performer dynamic character.
+The current audio graph routes all sound through two paths to `audioContext.destination`:
+- VoicePool: `AudioWorkletNode -> masterGain -> destination`
+- SamplePlayer: `smplr instrument -> masterGain -> destination`
 
-**Downstream consumers that must handle velocity:**
+Stereo panning must be inserted **per-performer**, not per-voice-pool. This means the panner node lives between the instrument output and the shared gain stage.
 
-| Consumer | File | Current | Change Needed |
-|----------|------|---------|---------------|
-| Scheduler (synth path) | `src/audio/scheduler.ts` | Posts `{ type: 'noteOn', frequency, time }` to AudioWorkletNode | Add `velocity` to the message: `{ type: 'noteOn', frequency, time, velocity }` |
-| SynthProcessor | `public/synth-processor.js` | `this.maxGain = 0.3` fixed | Scale `maxGain` by velocity: `this.noteGain = (velocity / 127) * 0.3` |
-| Scheduler (sampler path) | `src/audio/scheduler.ts` | Calls `samplePlayer.play(instrument, midi, time, duration)` | Add velocity parameter |
-| SamplePlayer | `src/audio/sampler.ts` | `target.start({ note: midi, time, duration })` | Add velocity: `target.start({ note: midi, time, duration, velocity })` -- smplr already supports velocity 0-127 natively |
-| MIDI Recorder (new) | New file | N/A | Records AgentNoteEvents with velocity for export |
-
-### 2. MIDI Export: Event Recording Architecture
-
-**Where to tap:** The Scheduler's `scheduleBeat()` method is the single point where all performer note events flow. This is where a MIDI recorder should observe events.
-
-**Pattern:** Observer/tap on `scheduleBeat()`. The recorder accumulates events with timestamps relative to performance start. On export, it converts to midi-writer-js Track/NoteEvent objects.
+**Architecture change -- Per-performer channel strips:**
 
 ```
-Ensemble.tick() -> AgentNoteEvent[] -> Scheduler.scheduleBeat()
-                                         |
-                                         +-> Audio playback (existing)
-                                         +-> MidiRecorder.record() (new)
+Before:  voice.node -> voicePool.masterGain -> destination
+After:   voice.node -> performerPanner -> performerGain -> masterBus -> destination
 ```
 
-**Timestamp strategy:** Record `beatIndex` (integer eighth-note count from performance start), not `AudioContext.currentTime`. Beat-based timestamps convert cleanly to MIDI ticks. Time-based timestamps require reverse-engineering BPM, which breaks if BPM changes during performance.
-
-### 3. Default 4 Performers
-
-**Current:** `AudioEngine.initialPerformerCount = 8`
-
-**Change:** Set to `4`. One-line change in `src/audio/engine.ts`. VoicePool size follows (`performerCount * 2`), so 8 voices instead of 16. This is a tuning change, not an architectural one.
-
----
-
-## Velocity Humanization Algorithm (No Library Needed)
-
-Build this in-house. It is 30-50 lines of TypeScript, not a library problem.
-
-### Approach: Layered velocity with per-performer personality
+Each performer gets a `StereoPannerNode` with a deterministic pan position based on performer count:
 
 ```typescript
-function computeVelocity(
-  baseVelocity: number,     // 80 (mf) default
-  beatPosition: number,     // 0-based eighth note within pattern
-  patternLength: number,    // total eighth notes in pattern
-  personality: AgentPersonality,
-): number {
-  // Layer 1: Metric accent (downbeats louder)
-  const metricAccent = beatPosition % 4 === 0 ? 12
-                     : beatPosition % 2 === 0 ? 6
-                     : 0;
-
-  // Layer 2: Per-performer bias (some play louder/softer)
-  const personalBias = (personality.velocityBias - 1.0) * 20; // +/- 4
-
-  // Layer 3: Random jitter (humanization)
-  const jitter = (Math.random() - 0.5) * personality.velocityVariance * 2;
-
-  // Layer 4: Phrase shaping (slight crescendo/decrescendo across pattern)
-  const phrasePosition = beatPosition / Math.max(1, patternLength - 1);
-  const phraseShape = Math.sin(phrasePosition * Math.PI) * 8; // arc shape
-
-  return Math.max(30, Math.min(127,
-    Math.round(baseVelocity + metricAccent + personalBias + jitter + phraseShape)
-  ));
+// Spread N performers evenly across stereo field
+// Performer 0: -0.8, Performer 1: +0.8, Performer 2: -0.4, etc.
+function panPosition(performerId: number, totalPerformers: number): number {
+  if (totalPerformers <= 1) return 0;
+  const spread = 0.8; // don't hard-pan to edges
+  return ((performerId / (totalPerformers - 1)) * 2 - 1) * spread;
 }
 ```
 
-### Personality Extensions
+**Impact on VoicePool:** Currently voices connect to a shared `masterGain`. With per-performer panning, claimed voices must be routed to the correct performer's panner. This requires the Scheduler to pass performer context when claiming voices, or (simpler) disconnect/reconnect the voice output to the appropriate panner at claim time.
 
-Add to `AgentPersonality` in `src/score/ensemble.ts`:
+**Impact on SamplePlayer:** smplr instruments connect to a shared `masterGain`. Per-performer panning requires either:
+- (A) Multiple smplr instances (one per performer) -- wasteful, duplicates sample memory
+- (B) Route smplr output through a splitter, then per-performer panners -- complex, smplr doesn't expose per-note routing
+- (C) **Recommended:** Create per-performer `GainNode -> StereoPannerNode` chains, and pass them as `destination` to smplr's `start()` call. smplr's `start({ destination })` option allows per-note output routing.
+
+**Confidence note:** smplr's per-note `destination` option needs verification during implementation. If unavailable, fall back to approach (A) with 3 instances (one per instrument type, panning at the instrument level rather than performer level). This would still provide spatial separation between instrument groups.
+
+### 2. Seeded PRNG: Replace Math.random() Calls
+
+**Scope of change:** The codebase has ~40 `Math.random()` calls across 5 files:
+
+| File | Call Count | Purpose |
+|------|-----------|---------|
+| `src/score/ensemble.ts` | ~15 | Weighted choices, personality generation, entry delays, dropout/rejoin |
+| `src/score/performer.ts` | ~4 | Repetition counts, pattern skip probability |
+| `src/score/velocity.ts` | ~4 | Jitter, personality generation |
+| `src/score/euclidean.ts` | ~12 | Pitch selection, rhythm generation, rotation |
+| `src/score/generative.ts` | ~10 | Interval selection, rest probability, motif transform |
+
+**Strategy:** Thread a `rng: () => number` function through `Ensemble` -> `PerformerAgent` -> score generators. The PRNG instance lives on `Ensemble` (created from seed at construction time). All downstream consumers receive `rng` instead of calling `Math.random()`.
+
+**What stays non-deterministic:** Velocity jitter. The `computeVelocity()` jitter layer uses `Math.random()` intentionally -- velocity micro-variation should differ on replay to keep the "live" feel. Only structural decisions (pattern choice, advancement, dropout) need determinism for shareable performances.
+
+### 3. Pattern Visualization: Canvas 2D (already in stack)
+
+| Technology | Version | Purpose | Why | Confidence |
+|------------|---------|---------|-----|------------|
+| Canvas 2D API | Browser built-in | Abstract geometry per performer + score overview | Already used for performer grid (`src/canvas/renderer.ts`). Team has working Canvas infrastructure (HiDPI setup, theme system, requestAnimationFrame). Adding a second canvas or expanding the existing one is incremental. No WebGL or library needed for 2D geometric shapes. | HIGH |
+
+**What NOT to add:**
+
+| Temptation | Why Avoid |
+|------------|-----------|
+| p5.js | 500KB+ library. Canvas 2D API is sufficient for geometric shapes. p5.js is for creative coding exploration, not production UI components. |
+| Three.js / WebGL | 3D is unnecessary. The visualization is abstract 2D geometry (circles, arcs, polygons). WebGL adds GPU context management complexity for zero visual benefit. |
+| D3.js | Data visualization library. The pattern visualization is generative art, not charts. D3's DOM-bindng model conflicts with Canvas rendering. |
+| SVG | Performer count is dynamic (2-16), each with animated shapes. Canvas is more performant for frequent redraws than SVG DOM manipulation. The existing canvas infrastructure proves this approach works. |
+
+**Two visualization targets:**
+
+1. **Per-performer abstract geometry:** Each performer gets a procedurally generated shape based on their personality parameters (advanceBias, repeatBias, dropoutBias, baseLoudness). The shape animates based on current state (playing/silent/complete, current pattern, repetition count). This replaces or augments the current card-based performer grid.
+
+2. **Score overview / timeline:** A horizontal track showing all patterns with performer positions marked. Shows the "band" of active patterns and each performer's progress. This is a new component, not a modification of the existing canvas.
+
+Both use the existing `PALETTE` from `src/canvas/theme.ts` and the `setupCanvas()` HiDPI helper from `src/canvas/renderer.ts`.
+
+### 4. Microtiming (Swing/Rubato): Scheduler Timing Offsets
+
+| Technology | Version | Purpose | Why | Confidence |
+|------------|---------|---------|-----|------------|
+| Scheduler timing math | Existing code | Add per-beat timing offsets for swing and rubato feel | Pure arithmetic on `nextNoteTime` in the existing Scheduler. No library or API needed. The lookahead scheduler already works with sub-millisecond AudioContext timing. | HIGH |
+
+**Swing implementation:**
+
+Swing delays every other eighth note by a percentage of the eighth-note duration. The existing `advanceTime()` method is the single point of change:
 
 ```typescript
-velocityBias: number;     // 0.8-1.2 (some performers naturally louder/softer)
-velocityVariance: number; // 5-20 (amount of random jitter in velocity)
+// Current:
+private advanceTime(): void {
+  const secondsPerEighth = 60 / (this._bpm * 2);
+  this.nextNoteTime += secondsPerEighth;
+}
+
+// With swing:
+private advanceTime(): void {
+  const secondsPerEighth = 60 / (this._bpm * 2);
+  const isOffbeat = this.beatCounter % 2 === 1;
+  const swingOffset = isOffbeat ? secondsPerEighth * this._swingAmount : 0;
+  // Compensate: shorten the following on-beat by the same amount
+  const compensation = !isOffbeat && this._swingAmount > 0
+    ? -secondsPerEighth * this._swingAmount : 0;
+  this.nextNoteTime += secondsPerEighth + swingOffset + compensation;
+}
 ```
 
-Generate in `generatePersonality()`:
+`swingAmount` range: 0.0 (straight) to 0.33 (triplet swing). Default 0.0.
+
+**Rubato implementation:**
+
+Rubato adds per-performer timing variation -- slight early/late offsets to note start times. This is applied in `scheduleBeat()` when scheduling individual notes, not in `advanceTime()` (which controls the global grid).
 
 ```typescript
-velocityBias: randomInRange(0.8, 1.2),
-velocityVariance: randomInRange(5, 20),
+// In scheduleBeat(), per-event:
+const rubatoOffset = this._rubatoEnabled
+  ? (rng() - 0.5) * secondsPerEighth * this._rubatoAmount * 2
+  : 0;
+const noteTime = time + rubatoOffset;
 ```
+
+`rubatoAmount` range: 0.0 to 0.08 (max ~8% of beat duration). Subtle values (0.02-0.04) create a natural "breathing" feel without audible timing errors.
+
+**Critical constraint:** Rubato offsets must never push a note past the next beat boundary, or notes will overlap/reorder. Clamp: `Math.max(-secondsPerEighth * 0.3, Math.min(secondsPerEighth * 0.3, rubatoOffset))`.
+
+---
+
+## Recommended Stack (Complete)
+
+### Core Framework (unchanged)
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| React | ^19.2.0 | UI framework | Existing |
+| Vite | ^7.3.1 | Build tool | Existing |
+| TypeScript | ~5.9.3 | Type safety | Existing |
+| Tailwind CSS | ^4.1.18 | Styling | Existing |
+| shadcn/ui | ^3.8.4 | UI components | Existing |
+
+### Audio (unchanged + StereoPannerNode)
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Web Audio API | Browser built-in | Audio synthesis and routing | Existing |
+| AudioWorklet | Browser built-in | Low-latency synth processing | Existing |
+| StereoPannerNode | Browser built-in | Per-performer stereo positioning | **NEW.** Native equal-power panning. Baseline browser support since April 2021. |
+| smplr | ^0.16.4 | Sampled piano + marimba | Existing |
+
+### Score/Composition (unchanged + Mulberry32)
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| midi-writer-js | ^3.1.1 | MIDI file export | Existing |
+| Mulberry32 PRNG | Hand-rolled (~15 LOC) | Deterministic performance replay | **NEW.** Zero-dependency. Drop-in Math.random() replacement. Enables shareable seed URLs. |
+
+### Visualization (unchanged, expanded use)
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Canvas 2D API | Browser built-in | Performer geometry + score overview | Existing infrastructure expanded. No new libraries. |
 
 ---
 
@@ -157,12 +228,15 @@ velocityVariance: randomInRange(5, 20),
 
 | Temptation | Why Avoid |
 |------------|-----------|
-| Tone.js for MIDI | Already rejected in Phase 1. MIDI export is file generation, not audio. |
-| @tonejs/midi | Bidirectional when we only write. midi-writer-js is leaner and speaks musical durations. |
-| Web MIDI API | For hardware MIDI I/O (controllers, synths). InTempo exports files, not real-time MIDI streams. |
-| ML-based humanization (midihum) | Python-only, 400 features, trained on piano competition data. Extreme overkill for a generative art piece. Simple layered velocity is musically appropriate for In C's minimalist aesthetic. |
-| file-saver.js | `URL.createObjectURL()` + `<a download>` is 5 lines. No library needed for browser file download. |
-| Zustand | Already not in the project (state flows via AudioEngine callbacks). Do not add for MIDI recording state -- keep it in the engine layer. |
+| seedrandom / esm-seedrandom | Dependency for ~15 lines of trivial code. ESM support is fragmented across forks. |
+| pure-rand | Excellent library but functional/immutable API requires refactoring ~40 call sites to thread state. Poor fit for InTempo's imperative style. |
+| p5.js | 500KB creative coding framework. Canvas 2D API is sufficient. |
+| Three.js / WebGL | 3D rendering for 2D geometric visualization. Unnecessary complexity. |
+| D3.js | Data visualization library. Wrong abstraction for generative art. |
+| Tone.js | Full audio framework. Would conflict with existing AudioWorklet/VoicePool architecture. |
+| Web Audio PannerNode (3D) | Full HRTF 3D spatialization. StereoPannerNode is simpler and correct for stereo spread. |
+| Howler.js | Audio playback library. Already have Web Audio API direct control. |
+| URL shortener service | For sharing seeds. Base36 seeds are already compact (6 chars). No external service needed. |
 
 ---
 
@@ -170,31 +244,37 @@ velocityVariance: randomInRange(5, 20),
 
 | Category | Recommended | Alternative | Why Not |
 |----------|-------------|-------------|---------|
-| MIDI generation | midi-writer-js | @tonejs/midi | Write-only need; midi-writer-js has musical duration API matching InTempo's beat model |
-| MIDI generation | midi-writer-js | Raw binary | SMF format is well-specified but fiddly (VLQ encoding, chunk headers). 15KB lib saves debugging time. |
-| MIDI generation | midi-writer-js | jsmidgen | Unmaintained since 2018, no TypeScript |
-| Humanization | Custom algorithm | midihum ML | Python-only, extreme overkill for minimalist generative music |
-| Humanization | Custom algorithm | Random velocity only | Sounds mechanical. Metric accents + phrase shaping + personality make it musical. |
-| File download | Native Blob + URL API | file-saver.js | 5 lines of native code, no dependency warranted |
+| PRNG | Mulberry32 (hand-rolled) | seedrandom | Dependency overhead for trivial algorithm; ESM fragmentation |
+| PRNG | Mulberry32 (hand-rolled) | pure-rand | Functional API mismatches imperative call sites; high refactor churn |
+| PRNG | Mulberry32 (hand-rolled) | SFC32 | Slightly better statistical quality but requires 4 seed values instead of 1. One seed is simpler for URL sharing. |
+| Stereo panning | StereoPannerNode | PannerNode (3D) | 3D spatialization is overkill for left-right spread. StereoPannerNode is purpose-built for this. |
+| Stereo panning | Per-performer panners | Global stereo widener | Per-performer gives spatial separation by instrument/voice. Global widener would just make the mix "wider" without positional meaning. |
+| Visualization | Canvas 2D (existing) | SVG | Higher repainting cost for animated elements at 60fps with 16 performers. |
+| Visualization | Canvas 2D (existing) | WebGL via regl/twgl | Overkill. No GPU-intensive rendering needed for geometric shapes. |
+| Microtiming | Scheduler math | External tempo library | No library exists that integrates with custom lookahead schedulers. Swing/rubato are 10-15 lines of arithmetic. |
 
 ---
 
 ## Installation
 
 ```bash
-# Single new dependency
-npm install midi-writer-js
+# No new npm dependencies required.
+# All v1.2 features use browser-native APIs and hand-rolled algorithms.
 
-# That's it. Everything else is algorithmic changes to existing code.
+# The only new file is:
+# src/lib/prng.ts (~15 lines)
 ```
 
 ---
 
 ## Sources
 
-- [MidiWriterJS GitHub](https://github.com/grimmdude/MidiWriterJS) -- API documentation, NoteEvent options (velocity 1-100), Writer.buildFile() -> Uint8Array
-- [MidiWriterJS npm](https://www.npmjs.com/package/midi-writer-js) -- v3.1.1 latest, weekly downloads ~1.5K
-- [@tonejs/midi GitHub](https://github.com/Tonejs/Midi) -- Evaluated and rejected; bidirectional read/write, time-based API
-- [smplr GitHub](https://github.com/danigb/smplr) -- Confirmed velocity support in start() method, 0-127 range
-- Existing codebase analysis: `src/audio/scheduler.ts`, `src/audio/voice-pool.ts`, `src/audio/engine.ts`, `src/score/ensemble.ts`, `public/synth-processor.js`
-- MIDI specification -- Standard velocity range 0-127, SMF Type 1 for multi-track
+- [StereoPannerNode - MDN](https://developer.mozilla.org/en-US/docs/Web/API/StereoPannerNode) -- pan AudioParam range -1 to +1, equal-power algorithm, baseline since April 2021
+- [StereoPannerNode.pan - MDN](https://developer.mozilla.org/en-US/docs/Web/API/StereoPannerNode/pan) -- a-rate AudioParam, default 0
+- [Mulberry32 PRNG reference](https://gist.github.com/tommyettinger/46a874533244883189143505d203312c) -- Original implementation, period analysis, known limitations (~1/3 of uint32 values unreachable, acceptable for music)
+- [Mulberry32 deterministic randomness guide](https://emanueleferonato.com/2026/01/08/understanding-how-to-use-mulberry32-to-achieve-deterministic-randomness-in-javascript/) -- JavaScript implementation with class-based and closure-based patterns
+- [pure-rand GitHub](https://github.com/dubzzz/pure-rand) -- Evaluated v6.0.0, TypeScript-native, immutable API (rejected for impedance mismatch)
+- [seedrandom GitHub](https://github.com/davidbau/seedrandom) -- Evaluated v3.0.5, CJS-first, state() method for serialization (rejected for ESM fragmentation)
+- [Web Audio timing tutorial](https://catarak.github.io/blog/2014/12/02/web-audio-timing-tutorial/) -- Lookahead scheduling pattern, AudioContext.currentTime precision
+- [Web Audio scheduling (IRCAM)](https://ircam-ismm.github.io/webaudio-tutorials/scheduling/timing-and-scheduling.html) -- Schedule-ahead pattern, setTimeout + AudioContext clock coordination
+- Existing codebase analysis: `src/audio/scheduler.ts` (lookahead scheduler), `src/audio/voice-pool.ts` (voice routing), `src/audio/sampler.ts` (smplr integration), `src/audio/engine.ts` (audio graph), `src/canvas/renderer.ts` (Canvas 2D infrastructure), `src/score/ensemble.ts` (~15 Math.random calls), `src/score/velocity.ts` (jitter layer)

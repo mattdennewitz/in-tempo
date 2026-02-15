@@ -1,139 +1,121 @@
 # Domain Pitfalls
 
 **Domain:** Browser-based generative music performance engine (Web Audio API)
-**Project:** InTempo -- generative "In C" engine with multiple simulated performers
+**Project:** InTempo -- v1.2 Polish (stereo spread, pattern visualization, shareable seeded performances, microtiming)
 **Researched:** 2026-02-15
-**Scope:** MIDI file export, velocity humanization, default 4 performers -- pitfalls specific to adding these features to the existing architecture
-**Confidence:** MEDIUM-HIGH (codebase analysis + verified library APIs + established MIDI spec knowledge)
+**Scope:** Pitfalls specific to adding stereo panning, seeded PRNG, pattern visualization, and microtiming offsets to the EXISTING InTempo architecture
+**Confidence:** MEDIUM-HIGH (codebase analysis + Web Audio API docs + established PRNG knowledge)
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, broken output, or unusable MIDI files.
+Mistakes that cause rewrites, broken audio, or non-deterministic "deterministic" features.
 
 ---
 
-### Pitfall 1: AudioContext Time to MIDI Tick Conversion Drift
+### Pitfall 1: StereoPannerNode Not Following Voice Through Pool Reuse
 
-**What goes wrong:** The existing scheduler tracks time as floating-point `AudioContext.currentTime` seconds. MIDI files use integer ticks at a fixed resolution (PPQ/PPQN). Converting float seconds to integer ticks introduces cumulative rounding errors. Over a 45-minute In C performance with eighth-note resolution, even tiny per-note rounding errors accumulate into audible timing drift in the exported MIDI -- notes shift by tens of milliseconds relative to the grid.
+**What goes wrong:** A `StereoPannerNode` is created per voice slot and inserted between the `AudioWorkletNode` and `masterGain`. The pan value is set when the voice is claimed (e.g., performer 0 pans left, performer 2 pans right). But the voice pool reuses nodes -- when voice index 2 is released by performer 0 and claimed by performer 3, the StereoPannerNode still has performer 0's pan position. The note plays from the wrong stereo position until someone remembers to update the pan value.
 
-**Why it happens:** The scheduler's `nextNoteTime` accumulates via `+= secondsPerEighth` (line 209 of scheduler.ts), which itself is a floating-point division (`60 / (bpm * 2)`). At 120 BPM, one eighth = 0.25s exactly, but at 137 BPM it is 0.2189781... repeating. Each note adds a fresh rounding error. When converting to integer MIDI ticks, these errors do not cancel out -- they accumulate in one direction.
+**Why it happens in THIS codebase:** `VoicePool.claim()` (voice-pool.ts line 41) returns `{ node, index }` but has no concept of "who" is claiming the voice. The caller (scheduler.ts `scheduleBeat()` line 180) knows the `event.performerId` but the voice pool does not. Voice stealing (line 48) silences the old voice and hands it to the new caller, but nothing in the current architecture resets per-voice routing state. Pan is routing state.
 
 **Consequences:**
-- Exported MIDI file drifts out of sync with a metronome grid
-- Multi-track MIDI imports into DAWs show notes slightly off-grid, requiring manual quantization
-- The drift is proportional to performance length -- short tests pass, long performances fail
-- If BPM changes mid-performance, the conversion error compounds at the transition
+- Notes appear at the wrong stereo position after voice stealing
+- The bug is intermittent -- only manifests when voices are reused across performers with different pan assignments
+- With 4 performers and 8 voices (`performerCount * 2`), voice stealing is common during dense passages, so the bug will be audible frequently
+- Sounds like notes "jumping" in the stereo field, which is disorienting
 
 **Prevention:**
-- Maintain a parallel integer tick counter alongside the float AudioContext time. Increment by a fixed integer tick count per eighth note (e.g., with PPQ=480, one eighth = 240 ticks, always exact).
-- Use the tick counter as the authoritative timeline for MIDI export; use AudioContext time only for audio scheduling.
-- Choose PPQ=480 (industry standard, evenly divisible by common subdivisions: quarter=480, eighth=240, sixteenth=120, triplet-eighth=160).
-- Never derive MIDI ticks from AudioContext seconds. Derive both audio time and MIDI ticks independently from the same musical beat counter.
+- Do NOT bake pan position into the voice pool's node graph. Instead, set pan value at claim time in the scheduler.
+- Modify `claim()` or add a method that accepts a pan value: the StereoPannerNode's `.pan.setValueAtTime(panValue, time)` must be called every time a voice is claimed, using the AudioContext scheduled time (not immediately).
+- The pan assignment must happen in `scheduleBeat()` right after `voicePool.claim()`, based on `event.performerId`. Use `voice.panner.pan.setValueAtTime(panForPerformer, time)` -- the `time` parameter ensures the pan change is sample-accurate with the note onset.
+- For voice stealing: the 2ms fast decay of the stolen voice happens at the old pan position, then the new note attacks at the new pan position. This is correct behavior -- no special handling needed as long as pan is set per-claim.
 
-**Detection:** Export a 10-minute performance at a non-round BPM (e.g., 137). Import into a DAW. Snap-to-grid and check if late notes are consistently early or late.
+**Detection:** Play with 4+ performers. Listen for notes that appear at wrong stereo positions. More reliably: log `{voiceIndex, performerId, panValue}` on every claim and verify pan matches performer.
 
-**Phase:** MIDI export foundation. Must be designed before any note recording begins.
+**Phase:** Stereo spread. Must be the first architectural decision -- pan-per-claim, not pan-per-slot.
 
 ---
 
-### Pitfall 2: Velocity Has No Path Through the Existing Architecture
+### Pitfall 2: Incomplete Seeded PRNG Replacement Breaks Determinism Silently
 
-**What goes wrong:** The current `AgentNoteEvent` interface returns `{ performerId, midi, duration }` -- there is no velocity field. The synth processor's `maxGain` is hardcoded to 0.3. The `SamplePlayer.play()` method does not pass a velocity parameter to smplr's `start()`. Adding velocity requires changes at every layer: ensemble AI -> scheduler -> voice pool/worklet -> sampler. Developers who add velocity at only one layer (e.g., just the MIDI export) produce files that do not match what was heard during playback.
+**What goes wrong:** The developer replaces `Math.random()` in `weightedChoice()` and `computeWeights()` with a seeded PRNG, tests that two runs with the same seed produce the same pattern sequence, ships it. But `Math.random()` is called in **13+ distinct locations** across 4 files (ensemble.ts, velocity.ts, generative.ts, euclidean.ts). Missing even one call site means the PRNG sequence diverges after that point, producing performances that start identical but gradually drift apart.
 
-**Why it happens:** Velocity was not part of the original design. It is a cross-cutting concern that touches: (1) the AI decision layer (generating velocity values), (2) the event transport (carrying velocity through `AgentNoteEvent`), (3) the AudioWorklet synth (scaling `maxGain` by velocity), (4) the smplr sampler (passing `velocity` to `start()`), and (5) the MIDI recorder (writing velocity to the file). Missing any one layer creates an inconsistency.
+**Why it happens in THIS codebase:** `Math.random()` is used directly (not through a wrapper) in:
+- `ensemble.ts`: `weightedChoice()` (line 88), `randomInRange()` (line 200), `randomReps()` (line 257), `handleEndgame()` (line 411), `rejoinLogic()` (line 448), constructor stagger delays (lines 559, 634)
+- `velocity.ts`: jitter computation (line 86), `generateVelocityPersonality()` (lines 106-107)
+- `generative.ts`: `randInt()` (line 52), `pick()` (line 56), `weightedPick()` (line 61), plus 7 more inline calls
+- `euclidean.ts`: pitch selection (lines 44, 54), pattern generation (lines 68, 77, 87, 91, 101, 118, 120, 122)
+
+That is **30+ individual `Math.random()` call sites**. Missing one produces a performance that diverges at an unpredictable point -- the hardest kind of bug to diagnose.
 
 **Consequences:**
-- If velocity is in MIDI export but not in audio: exported file sounds different from the live performance
-- If velocity is in audio but not MIDI: exported MIDI is flat and lifeless (all notes at default velocity)
-- If velocity is added to sampler but not synth worklet: piano and marimba respond to dynamics but synth voices do not, creating unnatural balance shifts
-- Partial implementation is worse than no implementation -- it misleads users about what they are hearing vs. exporting
+- Shared seed URLs produce "almost the same" performances -- same opening, diverging midway
+- Users share a seed expecting identical results, get different performances, lose trust in the feature
+- The divergence point depends on which call was missed, making reproduction non-deterministic from the developer's perspective
+- If velocity jitter (velocity.ts line 86) is missed, the note sequence is identical but dynamics differ -- extremely subtle
 
 **Prevention:**
-- Add `velocity: number` (0-127) to `AgentNoteEvent` first. This is the single source of truth.
-- Flow it through every consumer simultaneously:
-  1. `Ensemble.tick()` returns events with velocity
-  2. Scheduler passes velocity to `voice.node.port.postMessage({ type: 'noteOn', frequency, time, velocity })`
-  3. Synth processor multiplies `this.maxGain` by `velocity / 127`
-  4. `SamplePlayer.play()` passes `velocity` to `target.start({ note: midi, time, duration, velocity })`
-  5. MIDI recorder stores the velocity value directly (it is already 0-127)
-- Implement all five in a single milestone. Do not ship velocity in only one path.
+- Create a single `SeededRandom` class that wraps a PRNG (use mulberry32 -- 32-bit, fast, zero dependencies, 4 lines of code). Do NOT use `seedrandom` npm package -- it is overkill and the global `Math.seedrandom()` override pattern is dangerous.
+- Replace ALL `Math.random()` calls in the score/ directory with calls to an injected `SeededRandom` instance. Use grep to find every call site: `grep -rn "Math.random" src/score/`
+- Thread the PRNG instance through constructors: `Ensemble` gets it, passes it to each `PerformerAgent`, which passes it to `computeVelocity()`. Pattern generators (`generative.ts`, `euclidean.ts`) receive it as a parameter.
+- **Critically**: velocity jitter (velocity.ts line 86) must ALSO use the seeded PRNG. It is pure randomness that affects the musical output. Missing it produces identical note sequences with different dynamics.
+- Write a determinism test: run `Ensemble.tick()` 100 times with seed "test", collect all events. Reset, run again with same seed. Assert byte-for-byte identical event arrays.
+- Do NOT override `Math.random` globally. Other libraries (React internals, testing frameworks) use it.
 
-**Detection:** Play a performance with velocity enabled. Export MIDI. Import into a DAW with the same instruments. A/B compare. Dynamics should match.
+**Detection:** The determinism test above catches this. Run it in CI. If it ever fails, a new `Math.random()` call was introduced without using the seeded PRNG.
 
-**Phase:** Velocity humanization milestone. All five layers in a single coordinated change.
+**Phase:** Seeded PRNG. This is an all-or-nothing change. Partial replacement is worse than no replacement (false sense of determinism).
 
 ---
 
-### Pitfall 3: midi-writer-js Velocity Scale Mismatch (0-100 vs 0-127)
+### Pitfall 3: Microtiming Offsets Push Notes Outside the Lookahead Window
 
-**What goes wrong:** The `midi-writer-js` library uses a velocity range of **1-100** (percentage-based), not the MIDI standard 0-127. Developers who pass raw MIDI velocity values (0-127) to `NoteEvent({ velocity: midiVelocity })` get values silently clamped or misinterpreted. A velocity of 100 intended as "moderately loud" (78% of 127) becomes "maximum" (100% of 100). A velocity of 127 may be clamped to 100.
+**What goes wrong:** Microtiming humanization adds small random offsets (e.g., +/- 15ms) to the scheduled `time` parameter of each note. A note near the edge of the lookahead window gets pushed beyond it. The scheduler's `while (nextNoteTime < audioContext.currentTime + SCHEDULE_AHEAD_TIME)` loop (scheduler.ts line 138) has already advanced past this beat, so the note is scheduled in the past (the AudioContext plays it immediately, causing a timing glitch) or scheduled beyond the window (creating a gap where the note is late).
 
-**Why it happens:** midi-writer-js made a non-standard API choice to use percentages instead of raw MIDI values. This is not prominently documented and contradicts developer expectations. smplr uses 0-127 (standard MIDI). The two libraries use different scales for the same concept.
+**Why it happens in THIS codebase:** The lookahead window is exactly 100ms (`SCHEDULE_AHEAD_TIME = 0.1`). The timer interval is 25ms. A +20ms microtiming offset on a note scheduled at `currentTime + 95ms` pushes it to `currentTime + 115ms`, which is beyond the current window. The next tick will not re-schedule this beat (it has already been processed and `nextNoteTime` has advanced). The note never plays.
 
 **Consequences:**
-- All exported velocities are wrong -- compressed into the top ~20% of the dynamic range
-- Quiet notes (velocity 30-50) become inaudible or all sound the same
-- Humanization curves are destroyed by the scale mismatch
-- The bug is subtle: MIDI files "play" fine, they just lack dynamics
+- Notes randomly drop out when their microtiming offset pushes them past the lookahead boundary
+- At faster tempos (180 BPM, eighth = 167ms), the 100ms window has less margin, and dropouts become more frequent
+- The bug is tempo-dependent and offset-magnitude-dependent, making it appear random
+- Negative offsets (early notes) can push notes before `audioContext.currentTime`, causing them to fire immediately rather than at the scheduled time -- they cluster at the current moment, sounding like a flamming effect
 
 **Prevention:**
-- Map velocity before passing to midi-writer-js: `Math.round((velocity / 127) * 100)`
-- Alternatively, use raw tick-level MIDI byte writing instead of midi-writer-js's abstraction. The library's `Writer.buildFile()` returns a `Uint8Array` that can be inspected to verify velocity bytes.
-- Write a unit test: create a NoteEvent with velocity 64 (MIDI mezzo-forte), export to bytes, verify the velocity byte in the MIDI data is 81 (64/127 * 100, then mapped back to 127 scale by the library internally). If the round-trip is not preserving dynamics, the mapping is wrong.
-- Consider using `jsmidgen` instead, which works with raw MIDI 0-127 values and avoids this abstraction mismatch entirely.
+- Clamp microtiming offsets to stay within the lookahead window: `const clampedTime = Math.max(audioContext.currentTime + 0.005, Math.min(time + offset, audioContext.currentTime + SCHEDULE_AHEAD_TIME - 0.005))`
+- Better approach: apply microtiming offsets AFTER the scheduling decision but BEFORE passing to `voice.node.port.postMessage()`. The offset modifies `time` in the `noteOn` message, not `nextNoteTime`. This keeps the scheduler's beat clock unaffected.
+- Keep offsets small relative to the window: max +/- 10ms (0.01s) with a 100ms window gives plenty of margin. Real human microtiming is typically +/- 5-15ms.
+- NEVER modify `nextNoteTime` with microtiming offsets. The beat clock must remain on-grid. Only the audio scheduling time of individual notes gets offset.
+- For the MIDI recorder: record the original grid time (pre-offset) so MIDI export stays quantized. The microtiming is a playback-only humanization.
 
-**Detection:** Export a MIDI file with known velocity values. Open in a hex editor. Check the velocity bytes in note-on messages (status byte 0x9n, followed by note number, then velocity). If they do not match expected 0-127 values, the mapping is wrong.
+**Detection:** Play at 180 BPM with microtiming enabled at maximum intensity. Listen for dropped notes or notes that sound late/rushed. Log any note where `scheduledTime < audioContext.currentTime` (scheduled in the past).
 
-**Phase:** MIDI export implementation. Must be caught during initial library integration, not after.
+**Phase:** Microtiming. Must be designed with awareness of the 100ms lookahead constraint.
 
 ---
 
-### Pitfall 4: Recording Notes That Were Never Heard (Lookahead Ghost Notes)
+### Pitfall 4: PRNG Call Order Diverges When Performer Count Changes
 
-**What goes wrong:** The scheduler pre-schedules notes within a 100ms lookahead window. If the user stops playback, notes that were already scheduled to the audio thread will sound (they cannot be un-scheduled from AudioParam timelines), but the MIDI recorder may or may not have captured them depending on when "stop" was processed. This creates a mismatch: the last ~100ms of audio either appears or does not appear in the MIDI file, and the MIDI file may contain notes that the user did not perceive as "part of the performance."
+**What goes wrong:** The seeded PRNG produces a deterministic sequence: call 1 returns 0.42, call 2 returns 0.87, call 3 returns 0.13, etc. If performer count changes (3 performers vs 5 performers), each tick consumes a different number of PRNG calls (3 agents x N calls per agent vs 5 agents x N calls per agent). By tick 2, the PRNG sequences have diverged completely. A seed shared as "seed=abc123&performers=4" requires BOTH values to reproduce the performance.
 
-**Why it happens:** The scheduler's `stop()` method (line 65, scheduler.ts) sets `_playing = false` and clears the setTimeout, but does not cancel already-scheduled audio events. The audio thread continues to play notes that were pushed into its queue. A MIDI recorder that logs events at scheduling time (in the `scheduleBeat` method) will have captured these ghost notes. A recorder that logs at "note actually sounded" time would need to wait for audio thread confirmation, which is architecturally complex.
-
-**Consequences:**
-- MIDI file has 1-3 extra notes at the end that were not part of the intended performance
-- On a stop/start cycle, the MIDI file may have overlapping note data
-- Edge case: if the user rapidly stops and re-starts, ghost notes from the previous session bleed into the new recording
-
-**Prevention:**
-- Record notes at scheduling time (in `scheduleBeat`), but tag each with a "session ID" or monotonic sequence number
-- On stop, record the exact `audioContext.currentTime` of the stop command
-- When finalizing the MIDI file, trim any notes whose scheduled `time` is after the stop time
-- On reset, clear the recording buffer entirely
-- Do NOT try to record from the audio thread -- the main-thread scheduler already has all the information needed
-
-**Detection:** Start a performance, let it play for 10 seconds, hit stop. Check if the MIDI file duration matches the audio duration within 1 beat tolerance.
-
-**Phase:** MIDI recording infrastructure. Design the "session" and "trim" logic before building the recorder.
-
----
-
-### Pitfall 5: Multi-Track MIDI with Voice Stealing Creates Overlapping Notes
-
-**What goes wrong:** The voice pool uses voice stealing (line 48, voice-pool.ts): when all voices are busy, the oldest voice is silenced and reused. The stolen voice's note is cut short. If the MIDI recorder tracks note-on events but relies on the voice pool's release callback for note-off, the stolen note's duration in the MIDI file will be wrong -- either too long (if the recorder never got a note-off) or creates an overlapping note-on on the same pitch (illegal in many MIDI playback engines).
-
-**Why it happens:** Voice stealing is an audio-domain optimization. The MIDI recorder should not be coupled to the voice pool's internal state. But if the recorder uses the same "release timer" mechanism as the scheduler (lines 183-189, scheduler.ts) to determine note duration, voice stealing disrupts this: the `setTimeout`-based release timer for the stolen voice is cleared (line 173) but the MIDI recorder may not know about it.
+**Why it happens in THIS codebase:** `Ensemble.tick()` iterates over all agents (line 578: `for (const agent of this.agents)`). Each agent's `tick()` may call `Math.random()` 0-3 times depending on state (decision logic, dropout check, rejoin probability). With 4 agents, tick N consumes ~8 PRNG calls. With 5 agents, tick N consumes ~10 calls. After one tick, all subsequent random values are shifted.
 
 **Consequences:**
-- MIDI files with notes that overlap on the same channel + pitch, which some players handle poorly
-- Note durations in MIDI that do not match what was actually heard
-- With 4 default performers (2 synth voices), voice stealing will be common for synth performers, making this a frequent rather than edge-case bug
+- Seeds are only reproducible with the same performer count, BPM, and score mode
+- URL sharing requires encoding all parameters, not just the seed
+- If a user changes performer count after sharing a seed URL, they get a different performance
+- This is EXPECTED behavior but will be perceived as a bug if not communicated
 
 **Prevention:**
-- The MIDI recorder should track its own note durations based on the `event.duration * secondsPerEighth` calculation, NOT based on voice pool release callbacks
-- Each note event from `ensemble.tick()` already carries a `duration` field (in eighth notes). Convert this to MIDI ticks at recording time. This is the authoritative duration.
-- Do not couple MIDI recording to the audio signal path at all. Record from the ensemble event stream, not from the audio output.
-- For multi-track export: assign each performer to its own MIDI track (not channel -- tracks can share channels). This isolates overlapping issues.
+- Include performer count, BPM, and score mode in the shareable URL: `?seed=abc123&performers=4&bpm=120&mode=riley`
+- When loading a seed URL, lock all parameters to the shared values and disable the performer +/- controls (or warn that changing them breaks reproducibility)
+- Consider using per-agent PRNG streams: derive each agent's seed from the master seed + agent ID (`masterSeed + "-agent-" + agentId`). This way, adding/removing agents does not affect other agents' sequences. This is a more robust but more complex approach.
+- Document clearly: "Sharing a seed reproduces the same performance only with identical settings."
 
-**Detection:** Export MIDI, import into a DAW. Look for overlapping note regions on the same pitch within a single track. If found, the recorder is coupled to voice pool state.
+**Detection:** Generate two performances with seed "test", one with 4 performers, one with 5. If they start the same but diverge after beat 1, the PRNG is shared. If per-agent PRNGs are used, performers 0-3 should behave identically in both runs.
 
-**Phase:** MIDI recording architecture. The "record from events, not audio" principle must be established upfront.
+**Phase:** Seeded PRNG. Decide single-stream vs per-agent-stream before implementation.
 
 ---
 
@@ -141,105 +123,118 @@ Mistakes that cause rewrites, broken output, or unusable MIDI files.
 
 ---
 
-### Pitfall 6: Velocity Humanization That Sounds Robotic
+### Pitfall 5: Stereo Panning Breaks MIDI Export Expectations
 
-**What goes wrong:** Developers add random velocity variation (e.g., `baseVelocity + Math.random() * 20 - 10`) and call it "humanization." The result sounds like a machine with jitter, not a human performer. Real human velocity patterns have phrase-level contour (crescendo/diminuendo over 4-8 notes), beat-position correlation (downbeats louder), and performer-specific tendencies (some players are consistently louder).
+**What goes wrong:** Stereo pan positions are applied in the audio domain via `StereoPannerNode`. The MIDI recorder captures ensemble events (pitch, velocity, duration) but has no concept of panning. When users export MIDI and import into a DAW, all notes are centered. The stereo spatial arrangement they heard is lost. Users expect the MIDI to sound like what they heard.
 
-**Why it happens:** True humanization requires modeling musical intent, not just adding noise. Random per-note variation lacks temporal correlation and musical structure.
+**Why it happens:** Panning is an audio-domain concern. The MIDI recorder (midi-recorder.ts) records from the event stream, which carries `performerId`, `midi`, `duration`, and `velocity` but no pan information. MIDI does support panning via CC#10, but the recorder does not emit control changes.
 
 **Prevention:**
-- Layer three velocity components:
-  1. **Base velocity per performer** (from AgentPersonality): some performers play louder (personality.velocityBias: 0.7-1.0 mapping to MIDI ~80-110)
-  2. **Phrase contour**: use a slow sine or triangle wave over the pattern duration to create natural crescendo/diminuendo. Amplitude of ~15 MIDI velocity units.
-  3. **Beat-position accent**: downbeats (first note of pattern) get +10-15 velocity; off-beats get -5-10
-  4. **Micro-variation**: small random jitter of +/-5 MIDI velocity units on top of the above
-- Clamp final velocity to 30-120 range (never silent, never max-harsh)
-- The personality system (`AgentPersonality` in ensemble.ts) already has per-performer biases -- extend it with `velocityBias` and `dynamicRange`
+- When adding stereo spread, also add a CC#10 (Pan) event at the start of each MIDI track, set to the performer's pan position. Map from StereoPannerNode's -1..+1 range to MIDI CC#10's 0-127 range: `Math.round((pan + 1) / 2 * 127)`.
+- Insert the CC#10 event once per track at tick 0. If pan positions are static per performer (likely), this is a single event per track.
+- This is a "nice to have" but its absence will be noticed by DAW users.
 
-**Detection:** Export MIDI, plot velocity values over time in a DAW piano roll. If velocities look like white noise, humanization is wrong. If they show gentle curves with occasional accents, it is working.
+**Detection:** Export MIDI with stereo spread enabled. Import into DAW. Check if tracks have panning that matches the live performance.
 
-**Phase:** Velocity humanization. Implement after base velocity plumbing is working.
+**Phase:** Can be deferred to after stereo spread is working in audio. Not blocking.
 
 ---
 
-### Pitfall 7: Synth Processor Velocity Creates Clicks and Pops
+### Pitfall 6: Pattern Visualization Canvas Fights Existing PerformerCanvas for rAF
 
-**What goes wrong:** The synth processor (synth-processor.js) currently ramps to `this.maxGain = 0.3` on every noteOn. If velocity is added by changing `maxGain` per note (e.g., `this.maxGain = 0.3 * (velocity / 127)`), and a new note arrives while the envelope is still decaying from a previous note at a different velocity, the gain target jumps discontinuously. This creates audible clicks, especially on voice-stolen notes where the fast 2ms decay is followed by an immediate attack to a different gain level.
+**What goes wrong:** The existing `PerformerCanvas` runs a `requestAnimationFrame` loop (PerformerCanvas.tsx line 34-39) that redraws every frame. Adding a second canvas for pattern visualization that also runs its own rAF loop doubles the per-frame rendering work. On lower-powered devices, two independent rAF loops competing with the audio scheduler's `setTimeout` causes frame drops and potentially audible timing glitches.
 
-**Why it happens:** The processor's envelope model is simple: it ramps toward `targetEnvelope` (0 or 1) and multiplies by `maxGain`. If `maxGain` changes mid-envelope (during decay or during a voice steal's fast decay), the output jumps because `envelope * maxGain` changes discontinuously even if `envelope` itself is smooth.
+**Why it happens in THIS codebase:** `PerformerCanvas` never stops its rAF loop -- it redraws even when nothing has changed (no dirty-checking). Adding a second always-redrawing canvas doubles this waste. The scheduler's 25ms `setTimeout` (scheduler.ts line 143) competes with rAF for main thread time.
 
 **Consequences:**
-- Clicks on voice-stolen notes (fast decay at old gain, immediate attack at new gain)
-- Pops when consecutive notes have very different velocities
-- The clicks are more noticeable at high volumes and on speakers (less so on headphones), making them easy to miss during development
+- Dropped frames (janky UI) on mobile devices and low-end laptops
+- In extreme cases, the scheduler's setTimeout fires late, causing notes to be scheduled past their intended time (audible as timing jitter)
+- The audio glitches are hard to diagnose because they manifest as scheduler jitter, not canvas issues
 
 **Prevention:**
-- Do NOT change `maxGain` directly. Instead, add a separate `velocityGain` field that the envelope ramps toward during attack, similar to how `targetEnvelope` works.
-- Better approach: make the noteOn message set `this.targetVelocityGain = velocity / 127`, and during the attack phase, ramp both `envelope` (0->1) and `velocityGain` (old->new) simultaneously. The attack ramp already provides the click-free transition.
-- Ensure the voice steal path (`stop` message -> fast decay -> new noteOn) fully decays to near-zero before the new note's attack begins. The current 2ms fast decay should be sufficient if the new note's attack waits for the decay to complete.
-- In the processor's process() loop, multiply: `sample * envelope * velocityGain * 0.3` (where 0.3 is the fixed max ceiling)
+- Use a single rAF loop that renders BOTH canvases. Create a render manager that calls both `renderPerformers()` and `renderPattern()` in sequence within one rAF callback.
+- Better: add dirty-checking. Only redraw when state has changed. The `PerformerCanvas` currently redraws every frame because it uses a ref to always-current data. Instead, compare the current state hash with the previous frame's hash and skip rendering if unchanged. During silence (no notes firing), this eliminates nearly all rendering work.
+- Even better: use a single shared canvas with two "regions" -- performer cards on top, pattern visualization below. One canvas, one rAF, one rendering pass.
+- If using separate canvases, at minimum coordinate them through a shared rAF: `requestAnimationFrame(() => { renderA(); renderB(); })`.
 
-**Detection:** Set up a test that rapidly alternates between velocity=30 and velocity=120 on the same voice. Listen for clicks at the transitions. Inspect the waveform for discontinuities.
+**Detection:** Open Chrome DevTools Performance tab. Record 10 seconds of playback. Check if rAF callbacks exceed 4ms total. If they do, rendering is too expensive for the audio workload.
 
-**Phase:** Velocity implementation in the synth processor. Must be done carefully alongside the base velocity plumbing.
+**Phase:** Pattern visualization. Must be designed with awareness of the existing rAF loop.
 
 ---
 
-### Pitfall 8: MIDI File Has No Tempo Event (Defaults to 120 BPM Everywhere)
+### Pitfall 7: StereoPannerNode Graph Insertion Breaks Voice Pool Dispose/Resize
 
-**What goes wrong:** The developer records notes as MIDI ticks and creates the MIDI file, but forgets to insert a Set Tempo meta-event at tick 0 on track 0. MIDI players and DAWs default to 120 BPM when no tempo event is present. If InTempo's performance ran at 137 BPM but the MIDI file lacks a tempo event, the file plays back at 120 BPM -- all notes are proportionally slower and the total duration is wrong.
+**What goes wrong:** The current voice pool connects nodes as `voice -> masterGain -> destination`. Adding a StereoPannerNode creates `voice -> panner -> masterGain -> destination`. But `VoicePool.dispose()` (line 112) calls `voice.disconnect()` -- this disconnects the voice from the panner, but the panner remains connected to masterGain, leaking nodes. `VoicePool.resize()` (line 83) creates new voices and connects them to `masterGain`, but does not create panners for the new voices.
 
-**Why it happens:** midi-writer-js (and jsmidgen) do not auto-insert tempo events. The developer must explicitly call `track.setTempo(bpm)`. It is easy to forget because the timing "looks right" in terms of relative note spacing (the ratios are correct, the absolute tempo is wrong). And if your test BPM happens to be 120, you will never notice.
+**Why it happens in THIS codebase:** The voice pool manages `AudioWorkletNode` instances directly. It has no abstraction for "voice with routing chain." Adding a panner means every operation that touches the voice's graph (create, connect, disconnect, dispose) must also handle the panner.
+
+**Prevention:**
+- Create a `VoiceSlot` abstraction: `{ node: AudioWorkletNode, panner: StereoPannerNode }`. The voice pool manages `VoiceSlot[]` instead of `AudioWorkletNode[]`.
+- `dispose()` must disconnect both: `voice.disconnect(); panner.disconnect()`.
+- `resize()` (grow path, line 88) must create both the AudioWorkletNode and StereoPannerNode, connected in chain.
+- Alternatively, create the StereoPannerNode per-claim rather than per-slot. This avoids the graph management issue but creates/destroys nodes frequently. StereoPannerNode is cheap (no allocation, no processing when disconnected), so this is viable. Connect on claim: `voice -> tempPanner -> masterGain`. Disconnect tempPanner on release. But this adds create/GC overhead per note.
+- Recommended: per-slot panners (cleaner, no per-note allocation).
+
+**Detection:** Add 4 performers, play for 30 seconds, remove 2 performers (triggering potential voice pool resize). Check for audio graph leaks via `chrome://media-internals` or by monitoring AudioContext node count.
+
+**Phase:** Stereo spread. Part of the voice pool modification.
+
+---
+
+### Pitfall 8: Microtiming Applied to Sampled Instruments Differently Than Synth
+
+**What goes wrong:** The scheduler routes notes to either the synth voice pool (line 178) or the `SamplePlayer` (line 203). Microtiming offsets applied to voice pool notes via `postMessage({ type: 'noteOn', time: time + offset })` work because the AudioWorklet uses the `time` parameter for sample-accurate scheduling. But `SamplePlayer.play()` calls smplr's `start()` with a `time` parameter that may handle offsets differently -- smplr may quantize to audio block boundaries or ignore sub-block offsets.
+
+**Why it happens:** The synth worklet and smplr are different audio engines with different timing precision. The worklet processes at sample rate. smplr uses Web Audio's built-in scheduling which rounds to audio buffer boundaries (typically 128 samples = ~2.9ms at 44.1kHz).
+
+**Prevention:**
+- Test microtiming precision for both paths. Schedule a synth note and a sampled note at `time + 0.010` (10ms offset). Verify both actually play 10ms late (not quantized differently).
+- If smplr quantizes, document the precision difference and either: (a) accept it (2.9ms quantization is below perceptual threshold for most people), or (b) apply microtiming only to synth voices.
+- Apply the same offset calculation to both paths. Even if precision differs at the audio engine level, the scheduling intent should be identical.
+
+**Detection:** Record both a synth note and a sampled note with the same microtiming offset. Compare onset times in an audio editor. If they differ by more than 3ms, the engines handle timing differently.
+
+**Phase:** Microtiming. Test both audio paths.
+
+---
+
+### Pitfall 9: Seeded Generative Mode Regenerates Patterns on Every Start
+
+**What goes wrong:** `generateGenerativePatterns()` (generative.ts) is called when switching to generative mode (`getPatternsForMode('generative')`). If the user shares a seed for a generative-mode performance, the pattern generation itself must also be seeded. But the current `setScoreMode()` in engine.ts (line 222) calls `getPatternsForMode()` which calls `generateGenerativePatterns()` which uses `Math.random()` -- NOT the seeded PRNG. Even if the ensemble AI is properly seeded, the underlying patterns it navigates are different on each run.
+
+**Why it happens in THIS codebase:** Pattern generation is a separate phase from ensemble playback. The seeded PRNG must be active BEFORE patterns are generated, and the same PRNG sequence must be used for both pattern generation and ensemble decisions.
 
 **Consequences:**
-- MIDI plays back at wrong tempo
-- If BPM changes during performance (user adjusts the BPM slider), those changes are not reflected in the MIDI file
-- DAW import shows correct note patterns but at wrong speed
+- In generative mode, sharing a seed produces completely different music (different patterns, not just different performer decisions)
+- In riley mode, this is not an issue (patterns are static from `PATTERNS` constant)
+- In euclidean mode, `generateEuclideanPatterns()` also uses `Math.random()` and has the same problem
 
 **Prevention:**
-- Insert `setTempo(bpm)` on track 0 at tick 0 before any note events
-- If InTempo allows BPM changes during performance, insert additional Set Tempo events at the tick where BPM changed
-- Currently `setBpm` is clamped to 100-180 (scheduler.ts line 95). The MIDI recorder must listen for BPM changes and record them as tempo events.
-- Test with at least one non-120 BPM value. 120 is the MIDI default and will mask this bug.
+- Seed the PRNG BEFORE calling `getPatternsForMode()`. The initialization order must be: (1) create seeded PRNG from seed string, (2) generate patterns using the PRNG, (3) create Ensemble with those patterns and the same PRNG (continuing the sequence).
+- This means the PRNG must be passed into `generateGenerativePatterns()` and `generateEuclideanPatterns()` as a parameter.
+- For riley mode, pattern generation can be skipped (static), but the PRNG must still be initialized at the same point in the startup sequence so the ensemble gets the same PRNG state regardless of mode.
 
-**Detection:** Always test MIDI export at a BPM other than 120 (e.g., 140). Import into a DAW. Check that the tempo track shows the correct BPM.
+**Detection:** Load a generative-mode seed URL twice. If the actual patterns differ (different note content, not just different performer decisions), pattern generation was not seeded.
 
-**Phase:** MIDI export foundation. Part of the initial file setup.
+**Phase:** Seeded PRNG. Must cover pattern generation AND ensemble decisions.
 
 ---
 
-### Pitfall 9: Performer-to-MIDI-Channel Mapping Exceeds 16 Channels
+### Pitfall 10: Pan Position Assignment Is Ambiguous for Dynamic Performer Add/Remove
 
-**What goes wrong:** MIDI supports 16 channels per port (0-15). If each of InTempo's performers gets its own MIDI channel, and the system allows up to 16 performers (engine.ts line 129: `Math.max(2, Math.min(16, count))`), channel 10 (drums in General MIDI) will be inadvertently used for a melodic performer. With the new default of 4 performers this is less likely, but the system supports dynamic add/remove, so it can grow.
+**What goes wrong:** Stereo spread assigns pan positions to performers (e.g., evenly distributed from -1 to +1). With 4 performers: -1.0, -0.33, +0.33, +1.0. When a 5th performer is added via `addPerformer()`, the pan positions should redistribute. But the existing performers are already playing with their original positions. Redistributing requires either: (a) abruptly changing live performers' pan (audible stereo jump), or (b) not redistributing (the new performer gets an arbitrary position, breaking the even spread).
 
-**Why it happens:** Developers assign channel = performerId and forget that MIDI channel 10 (9 in 0-indexed) is reserved for drums in General MIDI. Also, channel numbers exceeding 15 are simply invalid.
-
-**Prevention:**
-- Use MIDI tracks (not channels) for performer separation. All performers can share channel 1 (or channels 1-3 for synth/piano/marimba instrument groups). MIDI Format 1 files support unlimited tracks.
-- If per-performer channels are desired for DAW import convenience, skip channel 10 (0-indexed: 9).
-- Map performers to channels by instrument type, not performer ID: all synth performers on channel 1, all piano on channel 2, all marimba on channel 3. This matches how a musician would set up a DAW project.
-
-**Detection:** Add 10+ performers, export MIDI, import into a General MIDI player. If one performer sounds like drums, channel 10 was hit.
-
-**Phase:** MIDI export multi-track setup.
-
----
-
-### Pitfall 10: Silent/Dropout Performers Create Empty MIDI Tracks
-
-**What goes wrong:** Performers go silent during dropout periods (ensemble.ts `status: 'silent'`). If the MIDI recorder creates a track per performer and the performer is silent for long stretches, the exported MIDI has tracks with long gaps of nothing. Some DAWs handle this fine; others display confusingly sparse tracks. More importantly, if a performer drops out permanently (endgame `status: 'complete'`), their track ends early, which some MIDI players interpret as end-of-file.
-
-**Why it happens:** The ensemble AI's dropout/rejoin behavior is a musical feature that does not map cleanly to MIDI's track model. MIDI tracks typically represent continuous instrumental parts.
+**Why it happens:** `Ensemble.addAgent()` (ensemble.ts line 626) assigns a new agent ID and returns it. There is no callback or event that triggers pan recalculation. The scheduler does not know that pan positions need updating for existing performers.
 
 **Prevention:**
-- Do not create separate tracks for silent performers. Only write note events when the performer is actually playing.
-- Insert MIDI "All Notes Off" (CC 123) when a performer drops out, to ensure clean silence
-- For endgame: when a performer completes, end their track with an End of Track meta-event at the correct tick position
-- Consider merging performers by instrument type (one track per instrument) instead of one track per performer. This produces cleaner MIDI files and is how a human arranger would organize the parts.
+- Assign pan positions based on performer ID modulo a fixed spread, not based on performer count. For example: `pan = ((id * GOLDEN_RATIO) % 1.0) * 2 - 1` distributes performers quasi-randomly but deterministically across the stereo field. Adding/removing performers does not affect others' positions.
+- Alternatively: use a fixed pan table indexed by performer creation order (performer 0 = center-left, 1 = center-right, 2 = far-left, 3 = far-right, etc.). New performers fill the next slot without disturbing existing ones.
+- Do NOT use `pan = (index / (count - 1)) * 2 - 1` because it depends on count, which changes.
 
-**Detection:** Export a full performance that includes dropout/rejoin cycles. Import into a DAW. Check for tracks that appear to "end" prematurely or have orphaned note-on events without corresponding note-offs.
+**Detection:** Start with 4 performers. Listen to the stereo image. Add a 5th performer. If existing notes audibly shift in the stereo field, pan positions are count-dependent.
 
-**Phase:** MIDI export, after basic recording works.
+**Phase:** Stereo spread. Design the pan assignment strategy before implementation.
 
 ---
 
@@ -247,49 +242,60 @@ Mistakes that cause rewrites, broken output, or unusable MIDI files.
 
 ---
 
-### Pitfall 11: Blob Download Does Not Work in All Browsers
+### Pitfall 11: Pattern Visualization Rendering Complexity Scales with Pattern Length
 
-**What goes wrong:** The typical browser MIDI download pattern (`URL.createObjectURL(blob)` + click on anchor) works in Chrome and Firefox but may fail in Safari or WebView contexts. Safari has historically had issues with Blob URLs for binary file downloads, sometimes opening the raw binary in a tab instead of downloading.
+**What goes wrong:** Pattern visualization draws the current pattern's notes as a visual representation (e.g., dots on a staff, cells in a grid). In generative mode, patterns can have up to 32 notes (generative.ts line 224: `maxNotes = 32` in climax phase). Drawing 32 notes per performer per frame (4 performers = 128 elements) is fine. But if the visualization shows multiple patterns (history or preview), or shows all performers' patterns simultaneously with animation, the rendering cost grows quadratically.
 
 **Prevention:**
-- Use the `a.download = 'filename.mid'` attribute (supported in all modern browsers)
-- Set the correct MIME type: `new Blob([uint8Array], { type: 'audio/midi' })`
-- Revoke the object URL after download to prevent memory leaks: `URL.revokeObjectURL(url)` in a setTimeout after the click
-- Test in Safari specifically
+- Limit visualization to one pattern per performer (the current pattern only)
+- Use dirty-flag rendering: only redraw when a performer advances to a new pattern
+- Pre-render pattern visualizations as offscreen canvases and blit them, rather than re-drawing note-by-note each frame
+- If showing pattern history, limit to the last 3-4 patterns with scroll
 
-**Detection:** Test the download flow in Safari. If a page of garbled text appears instead of a file download, the Blob handling is wrong.
+**Detection:** Switch to generative mode with 8 performers. Check if frame rate drops during climax phase (when patterns are longest).
 
-**Phase:** MIDI export UI integration.
+**Phase:** Pattern visualization. Design for worst-case pattern length.
 
 ---
 
-### Pitfall 12: Velocity Changes Break Existing Gain Staging
+### Pitfall 12: Mulberry32 PRNG Period Too Short for Very Long Performances
 
-**What goes wrong:** The voice pool's master gain (voice-pool.ts line 27) is set to `Math.min(1.0, 2.5 / size)` to prevent clipping. This was tuned assuming all voices output at `maxGain = 0.3`. If velocity is added and some notes are louder (velocity 120 = 0.28 gain) while others are quieter, the existing gain staging math no longer prevents clipping when multiple loud notes coincide. Conversely, quiet notes may become inaudible.
+**What goes wrong:** Mulberry32 has a period of 2^32 (~4.3 billion values). A 45-minute In C performance at 120 BPM with 4 performers consuming ~10 PRNG calls per eighth note = 120 * 2 * 45 * 10 = 108,000 calls. This is well within the period. But if the PRNG is also used for pattern generation (50-80 patterns, each consuming ~50 PRNG calls = 4,000 calls), the total is still only ~112,000. This is fine -- mulberry32's period is more than sufficient.
+
+**Why this is a MINOR pitfall:** It is technically not a problem for this application. Documenting it to prevent over-engineering: do NOT reach for a cryptographic PRNG or a 64-bit algorithm. Mulberry32 is adequate.
 
 **Prevention:**
-- After adding velocity, re-tune the master gain formula. With velocity, the worst case is `N` voices all at max velocity, so the formula should account for max possible per-voice output.
-- Add a `DynamicsCompressorNode` on the master bus as a safety limiter (threshold: -6dB, ratio: 12:1). This is cheap and prevents clipping regardless of velocity combinations.
-- The sampler's master gain (sampler.ts line 17, value 0.6) also needs review -- smplr's velocity support changes the output level range.
+- Use mulberry32. It is 4 lines of code, zero dependencies, and more than sufficient for this use case.
+- Implementation: `function mulberry32(seed: number) { return function() { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }`
+- Seed from string: hash the seed string to a 32-bit integer (use a simple hash like `str.split('').reduce((a, c) => ((a << 5) - a) + c.charCodeAt(0), 0)`)
 
-**Detection:** Play with 4 performers, all at high velocity, all playing simultaneously. Listen for distortion/clipping.
-
-**Phase:** Velocity implementation. Must be addressed alongside the synth processor velocity changes.
+**Phase:** Seeded PRNG. Use mulberry32, do not over-engineer.
 
 ---
 
-### Pitfall 13: MIDI Export Captures Pulse Generator Notes
+### Pitfall 13: Microtiming Offsets Not Recorded to MIDI (Intentional but Confusing)
 
-**What goes wrong:** The pulse generator (pulse.ts) plays a high C7 (MIDI 96) on every eighth note when enabled. If the MIDI recorder captures all scheduled audio events indiscriminately, the pulse appears in the MIDI file as a constant stream of C7 notes, which is musically incorrect for most use cases (the user may want the ensemble parts only).
+**What goes wrong:** Microtiming offsets are applied to the audio scheduling time but the MIDI recorder captures grid-quantized beats (by design -- see Pitfall 3 prevention). Users who export MIDI after hearing a humanized performance get a perfectly quantized MIDI file. This is correct behavior, but users may perceive it as a bug ("the MIDI sounds robotic compared to the live performance").
 
 **Prevention:**
-- Filter pulse events out of the MIDI recording by default
-- The pulse is scheduled in `scheduleBeat()` after the ensemble events (scheduler.ts lines 197-199), so it is easy to exclude -- only record events that come from `ensemble.tick()`, not from the pulse generator
-- Optionally: offer a "include pulse track" toggle in the export UI for users who want it
+- This is the correct design: MIDI export should be grid-quantized for maximum DAW compatibility. Microtiming is a playback-only humanization.
+- Document this in the UI: "MIDI export captures the musical structure. Microtiming humanization is applied during live playback only."
+- Optionally: offer a "humanized MIDI" export toggle that writes microtiming offsets as tick deviations. This is a future enhancement, not a v1.2 requirement.
 
-**Detection:** Export MIDI with pulse enabled. Import into a DAW. Look for a constant C7 note on every eighth note. If present and unwanted, the recorder is too broad.
+**Phase:** Microtiming + MIDI export intersection. No code change needed, just documentation.
 
-**Phase:** MIDI recording. Easy to avoid if the recorder only taps the ensemble event stream.
+---
+
+### Pitfall 14: Stereo Panning Inaudible on Mono Devices / Speakerphone
+
+**What goes wrong:** Careful stereo panning assignments are inaudible on phones held in portrait mode (mono speaker), Bluetooth speakers in mono mode, and accessibility settings that sum to mono. The stereo spread is the primary visual-to-audio differentiation feature -- if inaudible, performers sound identical.
+
+**Prevention:**
+- Do not rely on panning as the ONLY differentiator. The instrument assignment system (synth, piano, marimba) already provides timbral differentiation. Panning is additive, not primary.
+- Verify the mix sounds good in mono: sum L+R and listen. If any performer disappears or gets louder (phase issues), the panning is too aggressive.
+- StereoPannerNode uses equal-power panning, which maintains perceived loudness at all positions. This is already the correct algorithm -- no custom implementation needed.
+
+**Phase:** Stereo spread. Test in mono.
 
 ---
 
@@ -297,34 +303,36 @@ Mistakes that cause rewrites, broken output, or unusable MIDI files.
 
 | Phase Topic | Likely Pitfall | Mitigation |
 |-------------|---------------|------------|
-| MIDI recording infrastructure | Time conversion drift (Pitfall 1) | Integer tick counter parallel to AudioContext time from day one |
-| MIDI recording infrastructure | Ghost notes on stop (Pitfall 4) | Session tracking with stop-time trimming |
-| MIDI recording infrastructure | No tempo event (Pitfall 8) | Insert setTempo at tick 0; test at non-120 BPM |
-| MIDI recording infrastructure | Pulse captured (Pitfall 13) | Record from ensemble events only, not audio output |
-| Velocity plumbing | No velocity path exists (Pitfall 2) | Extend AgentNoteEvent, flow through all 5 layers simultaneously |
-| Velocity plumbing | Gain staging breaks (Pitfall 12) | Re-tune master gains; add DynamicsCompressorNode |
-| Synth processor velocity | Clicks from gain discontinuity (Pitfall 7) | Separate velocityGain field with ramped transitions |
-| Velocity humanization | Random noise is not humanization (Pitfall 6) | Layered model: personality + phrase contour + beat accent + micro-jitter |
-| MIDI file export | Velocity scale mismatch (Pitfall 3) | Map 0-127 to 0-100 for midi-writer-js, or use jsmidgen which uses raw MIDI values |
-| MIDI multi-track | Voice stealing durations (Pitfall 5) | Record from event stream durations, not voice pool callbacks |
-| MIDI multi-track | Channel 10 drums conflict (Pitfall 9) | Map by instrument type to channels 1-3, not performer ID |
-| MIDI multi-track | Empty tracks from dropouts (Pitfall 10) | Merge by instrument type or handle silent periods explicitly |
-| MIDI download UI | Safari Blob issues (Pitfall 11) | Use download attribute + correct MIME type + URL revocation |
+| Stereo spread: voice pool integration | Pan not following voice reuse (Pitfall 1) | Set pan at claim time, not at pool creation time |
+| Stereo spread: voice pool integration | Dispose/resize graph leaks (Pitfall 7) | VoiceSlot abstraction with panner included |
+| Stereo spread: pan assignment | Dynamic add/remove breaks spread (Pitfall 10) | ID-based pan assignment, not count-based |
+| Stereo spread: MIDI export | Pan positions lost in export (Pitfall 5) | Add CC#10 at track start |
+| Seeded PRNG: Math.random replacement | Incomplete replacement (Pitfall 2) | grep ALL call sites, replace ALL, determinism test |
+| Seeded PRNG: call order | Performer count changes sequence (Pitfall 4) | Per-agent PRNG streams or encode all params in URL |
+| Seeded PRNG: generative/euclidean | Pattern generation not seeded (Pitfall 9) | Seed PRNG before pattern generation |
+| Pattern visualization: rendering | Two rAF loops competing (Pitfall 6) | Single rAF loop, dirty-checking, shared canvas |
+| Pattern visualization: scaling | Long patterns in generative mode (Pitfall 11) | Limit to current pattern, dirty-flag rendering |
+| Microtiming: scheduler | Offsets exceed lookahead window (Pitfall 3) | Clamp offsets, never modify nextNoteTime |
+| Microtiming: dual audio paths | Synth vs sampler timing precision (Pitfall 8) | Test both paths, accept sub-block quantization |
+| Microtiming: MIDI export | Quantized export surprises users (Pitfall 13) | Document intentional design, optional future toggle |
 
 ## Summary of Risk by Severity
 
-**The single most dangerous pitfall for this milestone** is Pitfall 2 (velocity has no path through the architecture). Velocity is a cross-cutting concern that touches every layer from AI decisions to audio output to MIDI export. Implementing it partially guarantees inconsistency between what users hear and what they export. All five layers must be updated in coordination.
+**The single most dangerous pitfall for this milestone** is Pitfall 2 (incomplete seeded PRNG replacement). With 30+ `Math.random()` call sites across 4 files, missing even one produces a "deterministic" feature that silently fails. The failure mode is subtle -- performances start identical and diverge unpredictably -- making it extremely hard to debug without a comprehensive determinism test. This is an all-or-nothing change.
 
-**The second most dangerous** is Pitfall 1 (AudioContext time to MIDI tick drift). This is architecturally fundamental -- if the time conversion is wrong, every note in the MIDI file is wrong. The fix (parallel integer tick counter) must be designed before any recording code is written.
+**The second most dangerous** is Pitfall 3 (microtiming offsets exceeding the lookahead window). This produces randomly dropped notes that depend on tempo, offset magnitude, and scheduling timing. The bug is intermittent and tempo-dependent, making it hard to reproduce. The 100ms lookahead window is tight, and offsets must be carefully clamped.
 
-**The most insidious** is Pitfall 3 (midi-writer-js velocity scale). It produces MIDI files that "work" but have compressed dynamics. Because the notes play at the right pitches and times, the bug passes casual testing. Only careful A/B comparison reveals the dynamic range is wrong. This can be avoided entirely by choosing jsmidgen (which uses standard 0-127) or by writing a mapping function with a unit test.
+**The most architecturally impactful** is Pitfall 1 (StereoPannerNode not following voice reuse). This requires modifying the voice pool's interface and the scheduler's voice claim flow. Getting this wrong early means reworking the audio graph later.
+
+**The most commonly underestimated** is Pitfall 4 (PRNG call order diverging with performer count). Developers assume "same seed = same result" without realizing the PRNG sequence is consumed differently based on the number of agents. This must be either solved architecturally (per-agent streams) or communicated clearly (all parameters in the shareable URL).
 
 ## Sources
 
-- InTempo codebase analysis: scheduler.ts, voice-pool.ts, engine.ts, sampler.ts, synth-processor.js, ensemble.ts (direct code review) -- HIGH confidence
-- [smplr GitHub repository](https://github.com/danigb/smplr) -- start() accepts velocity 0-127, confirmed via README -- HIGH confidence
-- [midi-writer-js GitHub repository](https://github.com/grimmdude/MidiWriterJS) -- velocity parameter uses 1-100 scale, confirmed via README and API docs -- HIGH confidence
-- [MIDI file timing/PPQN reference](http://midi.teragonaudio.com/tech/midifile/ppqn.htm) -- integer tick rounding issues documented -- HIGH confidence
-- [MDN AudioWorklet documentation](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Using_AudioWorklet) -- postMessage for parameter control -- HIGH confidence
-- [jsmidgen npm package](https://www.npmjs.com/package/jsmidgen) -- alternative MIDI writer using raw 0-127 values -- MEDIUM confidence (less recent activity but stable API)
-- MIDI specification knowledge (tempo meta-events, channel 10 drums, note-on/off semantics) -- HIGH confidence (well-established standard)
+- InTempo codebase analysis: voice-pool.ts, scheduler.ts, ensemble.ts, velocity.ts, generative.ts, euclidean.ts, engine.ts, PerformerCanvas.tsx, renderer.ts (direct code review) -- HIGH confidence
+- [StereoPannerNode MDN documentation](https://developer.mozilla.org/en-US/docs/Web/API/StereoPannerNode) -- pan.setValueAtTime for sample-accurate panning -- HIGH confidence
+- [Web Audio scheduling best practices (web.dev)](https://web.dev/audio-scheduling/) -- lookahead window timing constraints -- HIGH confidence
+- [Web Audio timing tutorials (IRCAM)](https://ircam-ismm.github.io/webaudio-tutorials/scheduling/timing-and-scheduling.html) -- lookahead/period relationship, jitter mitigation -- HIGH confidence
+- [seedrandom (npm)](https://www.npmjs.com/package/seedrandom) -- evaluated and rejected in favor of inline mulberry32 for simplicity -- MEDIUM confidence
+- [mulberry32 PRNG](https://gist.github.com/blixt/f17b47c62508be59987b) -- simple 32-bit PRNG, adequate period for this use case -- HIGH confidence (well-established algorithm)
+- [tc39 proposal-seeded-random](https://github.com/tc39/proposal-seeded-random) -- native seeded PRNG not yet available, must polyfill -- MEDIUM confidence
+- MIDI CC#10 (Pan) specification -- standard controller number for stereo position in MIDI -- HIGH confidence
