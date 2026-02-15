@@ -6,6 +6,7 @@ import type { Pattern } from '../audio/types.ts';
 import type { ScoreMode } from '../audio/types.ts';
 import { PATTERNS } from './patterns.ts';
 import { generateGenerativePatterns } from './generative.ts';
+import { generateEuclideanPatterns } from './euclidean.ts';
 
 export function getPatternsForMode(mode: ScoreMode): Pattern[] {
   switch (mode) {
@@ -14,7 +15,6 @@ export function getPatternsForMode(mode: ScoreMode): Pattern[] {
     case 'generative':
       return generateGenerativePatterns();
     case 'euclidean':
-      // Placeholder until Plan 02 -- return Riley's patterns
-      return PATTERNS;
+      return generateEuclideanPatterns();
   }
 }
