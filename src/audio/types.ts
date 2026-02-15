@@ -16,11 +16,14 @@ export interface EngineState {
 
 export type TransportCommand = 'start' | 'stop' | 'reset';
 
+export type InstrumentType = 'synth' | 'piano' | 'marimba';
+
 export interface PerformerState {
   id: number;
   patternIndex: number;    // 0-based
   currentPattern: number;  // 1-based (for display)
   status: 'playing' | 'silent' | 'complete';
+  instrument: InstrumentType;
 }
 
 export interface EnsembleEngineState {
@@ -28,4 +31,5 @@ export interface EnsembleEngineState {
   bpm: number;
   performers: PerformerState[];
   ensembleComplete: boolean;
+  pulseEnabled: boolean;
 }
