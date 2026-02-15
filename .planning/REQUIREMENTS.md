@@ -1,7 +1,7 @@
 # Requirements: InTempo
 
 **Defined:** 2026-02-15
-**Core Value:** Ensemble behavior must feel alive — performers making believable musical decisions over a precisely timed audio engine, so each performance is unique and compelling.
+**Core Value:** Ensemble behavior must feel alive -- performers making believable musical decisions over a precisely timed audio engine, so each performance is unique and compelling.
 
 ## v1.1 Requirements
 
@@ -21,6 +21,7 @@ Requirements for MIDI export, velocity humanization, and configuration. Each map
 - [ ] **VEL-02**: Each performer has a distinct velocity personality (some louder, some softer on average)
 - [ ] **VEL-03**: Metric accents emphasize downbeats with slightly higher velocity
 - [ ] **VEL-04**: Phrase contour shapes velocity across pattern repetitions (not just random per-note)
+- [ ] **VEL-05**: User can toggle humanization on/off and select intensity level (subtle, moderate, expressive) before or during playback
 
 ### Configuration
 
@@ -30,7 +31,7 @@ Requirements for MIDI export, velocity humanization, and configuration. Each map
 
 ### Audio Polish
 
-- **AUD-P01**: Stereo spread — performers panned across the stereo field
+- **AUD-P01**: Stereo spread -- performers panned across the stereo field
 - **AUD-P02**: Recording/export to audio file (WAV/MP3)
 
 ### Visual Identity
@@ -47,7 +48,7 @@ Requirements for MIDI export, velocity humanization, and configuration. Each map
 | Mobile-optimized layout | Desktop-first |
 | User conducting/intervention | Spectator only by design |
 | Pulse track in MIDI export | Pulse is a playback aid, not a musical voice |
-| MIDI input (live play) | Out of scope — this is a generative/spectator tool |
+| MIDI input (live play) | Out of scope -- this is a generative/spectator tool |
 | BPM change events in MIDI | Adds complexity; constant BPM per performance is sufficient |
 
 ## Traceability
@@ -56,22 +57,23 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MIDI-01 | — | Pending |
-| MIDI-02 | — | Pending |
-| MIDI-03 | — | Pending |
-| MIDI-04 | — | Pending |
-| MIDI-05 | — | Pending |
-| VEL-01 | — | Pending |
-| VEL-02 | — | Pending |
-| VEL-03 | — | Pending |
-| VEL-04 | — | Pending |
-| CFG-01 | — | Pending |
+| VEL-01 | Phase 5 | Pending |
+| VEL-02 | Phase 5 | Pending |
+| VEL-03 | Phase 5 | Pending |
+| VEL-04 | Phase 5 | Pending |
+| VEL-05 | Phase 5 | Pending |
+| CFG-01 | Phase 5 | Pending |
+| MIDI-01 | Phase 6 | Pending |
+| MIDI-02 | Phase 6 | Pending |
+| MIDI-03 | Phase 6 | Pending |
+| MIDI-04 | Phase 6 | Pending |
+| MIDI-05 | Phase 6 | Pending |
 
 **Coverage:**
-- v1.1 requirements: 10 total
-- Mapped to phases: 0
-- Unmapped: 10 ⚠️
+- v1.1 requirements: 11 total
+- Mapped to phases: 11
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-15*
-*Last updated: 2026-02-15 after initial definition*
+*Last updated: 2026-02-15 after roadmap creation*
