@@ -30,7 +30,7 @@
 
 **Milestone Goal:** Elevate the listening and sharing experience with stereo spread, pattern visualization, shareable seeded performances, and microtiming humanization.
 
-- [x] **Phase 7: Seeded PRNG** — Deterministic performances reproducible via shared URL — completed 2026-02-15
+- [ ] **Phase 7: Seeded PRNG** — Deterministic performances reproducible via shared URL (gap closure)
 - [ ] **Phase 8: Microtiming** — Swing, rubato, and per-performer timing personality
 - [ ] **Phase 9: Stereo Spread** — Performers panned across the stereo field
 - [ ] **Phase 10: Pattern Visualization** — Score overview and per-performer visual feedback
@@ -46,11 +46,12 @@
   2. The current seed is visible in the UI and can be copied to clipboard with one click
   3. User can enter a seed manually to replay a specific performance
   4. Pasting a shared URL into a browser auto-configures mode, BPM, performer count, and seed, then starts the same performance
-**Plans**: 2 plans
+**Plans**: 3 plans
 
 Plans:
 - [x] 07-01-PLAN.md — SeededRng class (Mulberry32) + replace all 32 Math.random() call sites
 - [x] 07-02-PLAN.md — Wire RNG through AudioEngine, seed UI, URL hash sharing
+- [ ] 07-03-PLAN.md — Fix seed display: Engine intercepts onStateChange to overlay seed
 
 ### Phase 8: Microtiming
 **Goal**: Performances feel rhythmically organic with swing, rubato, and per-performer timing variation
@@ -105,7 +106,7 @@ Plans:
 | 4. Composition Modes | v1.0 | 3/3 | Complete | 2026-02-15 |
 | 5. Velocity Humanization | v1.1 | 3/3 | Complete | 2026-02-15 |
 | 6. MIDI Export | v1.1 | 2/2 | Complete | 2026-02-15 |
-| 7. Seeded PRNG | v1.2 | 2/2 | Complete | 2026-02-15 |
+| 7. Seeded PRNG | v1.2 | 2/3 | Gap closure | - |
 | 8. Microtiming | v1.2 | 0/TBD | Not started | - |
 | 9. Stereo Spread | v1.2 | 0/TBD | Not started | - |
 | 10. Pattern Visualization | v1.2 | 0/TBD | Not started | - |
