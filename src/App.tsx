@@ -1,32 +1,34 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { AudioEngine } from './audio/engine.ts';
-import type { PerformerState } from './audio/types.ts';
-import { TOTAL_PATTERNS } from './score/patterns.ts';
+import type { EnsembleEngineState, ScoreMode } from './audio/types.ts';
+import { ScoreModeSelector } from './components/ScoreModeSelector.tsx';
 import { Transport } from './components/Transport.tsx';
 import { BpmSlider } from './components/BpmSlider.tsx';
 import { PatternDisplay } from './components/PatternDisplay.tsx';
-import { ScoreModeSelector } from './components/ScoreModeSelector.tsx';
 import { PerformerControls } from './components/PerformerControls.tsx';
 import './App.css';
+
+const INITIAL_STATE: EnsembleEngineState = {
+  playing: false,
+  bpm: 120,
+  performers: [],
+  ensembleComplete: false,
+  totalPatterns: 53,
+  scoreMode: 'riley',
+  pulseEnabled: false,
+  performerCount: 8,
+};
 
 function App() {
   const engineRef = useRef<AudioEngine>(new AudioEngine());
 
-  const [playing, setPlaying] = useState(false);
-  const [performers, setPerformers] = useState<PerformerState[]>([]);
-  const [ensembleComplete, setEnsembleComplete] = useState(false);
-  const [bpm, setBpm] = useState(120);
-  const [performerCount, setPerformerCount] = useState(8);
+  const [engineState, setEngineState] = useState<EnsembleEngineState>(INITIAL_STATE);
 
   useEffect(() => {
     const engine = engineRef.current;
-    engine.onStateChange = (state) => {
-      setPlaying(state.playing);
-      setPerformers(state.performers);
-      setEnsembleComplete(state.ensembleComplete);
-      setBpm(state.bpm);
-    };
+    engine.onStateChange = setEngineState;
     return () => {
+      engine.onStateChange = null;
       engine.dispose();
     };
   }, []);
@@ -47,40 +49,44 @@ function App() {
     engineRef.current.setBpm(newBpm);
   }, []);
 
+  const handleModeChange = useCallback((mode: ScoreMode) => {
+    engineRef.current.setScoreMode(mode);
+  }, []);
+
   const handleAddPerformer = useCallback(() => {
-    if (playing) {
+    if (engineState.playing) {
       engineRef.current.addPerformer();
     } else {
-      setPerformerCount(prev => {
-        const next = Math.min(16, prev + 1);
-        engineRef.current.setPerformerCount(next);
-        return next;
-      });
+      engineRef.current.setPerformerCount((engineState.performerCount ?? 8) + 1);
+      setEngineState(prev => ({ ...prev, performerCount: Math.min(16, (prev.performerCount ?? 8) + 1) }));
     }
-  }, [playing]);
+  }, [engineState.playing, engineState.performerCount]);
 
   const handleRemovePerformer = useCallback((id: number) => {
-    if (playing) {
+    if (engineState.playing) {
       engineRef.current.removePerformer(id);
     } else {
-      setPerformerCount(prev => {
-        const next = Math.max(2, prev - 1);
-        engineRef.current.setPerformerCount(next);
-        return next;
-      });
+      engineRef.current.setPerformerCount((engineState.performerCount ?? 8) - 1);
+      setEngineState(prev => ({ ...prev, performerCount: Math.max(2, (prev.performerCount ?? 8) - 1) }));
     }
-  }, [playing]);
+  }, [engineState.playing, engineState.performerCount]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen gap-8 p-8">
+      <ScoreModeSelector
+        currentMode={engineState.scoreMode}
+        onChange={handleModeChange}
+        disabled={engineState.playing}
+      />
       <PatternDisplay
-        performers={performers}
-        playing={playing}
-        ensembleComplete={ensembleComplete}
-        totalPatterns={TOTAL_PATTERNS}
+        performers={engineState.performers}
+        playing={engineState.playing}
+        ensembleComplete={engineState.ensembleComplete}
+        totalPatterns={engineState.totalPatterns}
+        scoreMode={engineState.scoreMode}
       />
       <Transport
-        playing={playing}
+        playing={engineState.playing}
         onStart={handleStart}
         onStop={handleStop}
         onReset={handleReset}
@@ -88,15 +94,14 @@ function App() {
       <PerformerControls
         onAdd={handleAddPerformer}
         onRemove={handleRemovePerformer}
-        performers={performers}
+        performers={engineState.performers}
         disabled={false}
-        count={playing ? undefined : performerCount}
+        count={engineState.playing ? undefined : engineState.performerCount}
       />
       <BpmSlider
-        bpm={bpm}
+        bpm={engineState.bpm}
         onChange={handleBpmChange}
       />
-      <ScoreModeSelector disabled={playing} />
     </div>
   );
 }

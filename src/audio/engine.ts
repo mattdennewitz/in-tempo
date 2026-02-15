@@ -6,13 +6,14 @@
  *
  * Completely framework-agnostic: no React imports, no DOM access.
  */
-import type { EnsembleEngineState } from './types.ts';
+import type { EnsembleEngineState, ScoreMode, Pattern } from './types.ts';
 import { VoicePool } from './voice-pool.ts';
 import { Scheduler } from './scheduler.ts';
 import { SamplePlayer } from './sampler.ts';
 import { PulseGenerator } from './pulse.ts';
 import { Ensemble } from '../score/ensemble.ts';
 import { PATTERNS } from '../score/patterns.ts';
+import { getPatternsForMode } from '../score/score-modes.ts';
 
 export class AudioEngine {
   private audioContext: AudioContext | null = null;
@@ -24,6 +25,8 @@ export class AudioEngine {
   private initialized: boolean = false;
   private pendingOnStateChange: ((state: EnsembleEngineState) => void) | null = null;
   private initialPerformerCount = 8;
+  private currentMode: ScoreMode = 'riley';
+  private currentPatterns: Pattern[] = PATTERNS;
 
   /**
    * Initialize the audio subsystem: create AudioContext, load worklet module,
@@ -35,7 +38,7 @@ export class AudioEngine {
     this.audioContext = new AudioContext();
     await this.audioContext.audioWorklet.addModule('/synth-processor.js');
 
-    this.ensemble = new Ensemble(this.initialPerformerCount, PATTERNS);
+    this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode);
     this.voicePool = new VoicePool(this.audioContext, this.initialPerformerCount * 2);
 
     // Initialize sampled instruments (loads from CDN)
@@ -138,9 +141,58 @@ export class AudioEngine {
       bpm: 120,
       performers: [],
       ensembleComplete: false,
+      totalPatterns: this.currentPatterns.length,
+      scoreMode: this.currentMode,
       pulseEnabled: false,
-      performerCount: 8,
+      performerCount: this.initialPerformerCount,
     };
+  }
+
+  /**
+   * Switch score mode. Generates new patterns, rebuilds Ensemble and Scheduler.
+   * Does NOT auto-restart playback -- user must click Start.
+   */
+  setScoreMode(mode: ScoreMode): void {
+    this.currentMode = mode;
+    this.currentPatterns = getPatternsForMode(mode);
+
+    if (this.initialized) {
+      // Preserve callback before tearing down old scheduler
+      const callback = this.scheduler?.onStateChange ?? this.pendingOnStateChange;
+
+      // Fully dispose old scheduler (clears tick timer + release timers)
+      this.scheduler?.reset();
+      this.voicePool?.stopAll();
+
+      // Rebuild ensemble and scheduler with new patterns
+      this.ensemble = new Ensemble(this.performerCount, this.currentPatterns, mode);
+      this.scheduler = new Scheduler(
+        this.audioContext!,
+        this.voicePool!,
+        this.ensemble,
+        this.samplePlayer!,
+        this.pulseGenerator!,
+      );
+
+      // Reconnect callback and fire state change
+      if (callback) {
+        this.scheduler.onStateChange = callback;
+        callback(this.getState());
+      }
+    } else if (this.pendingOnStateChange) {
+      // Not yet initialized — fire fallback state so UI reflects new mode/pattern count
+      this.pendingOnStateChange(this.getState());
+    }
+  }
+
+  /** Get current score mode. */
+  get scoreMode(): ScoreMode {
+    return this.currentMode;
+  }
+
+  /** Get current pattern count. */
+  get patternCount(): number {
+    return this.currentPatterns.length;
   }
 
   /** Set state change callback. Passes through to scheduler, or stores for later. */
