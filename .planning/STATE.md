@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** Ensemble behavior must feel alive -- performers making believable musical decisions over a precisely timed audio engine, so each performance is unique and compelling.
-**Current focus:** Phase 2 - Ensemble AI
+**Current focus:** Phase 2 Complete -- Ready for Phase 3
 
 ## Current Position
 
-Phase: 2 of 4 (Ensemble AI)
-Plan: 1 of 2 in current phase
-Status: In Progress
-Last activity: 2026-02-14 -- Completed 02-01-PLAN.md
+Phase: 2 of 4 (Ensemble AI) -- COMPLETE
+Plan: 2 of 2 in current phase -- COMPLETE
+Status: Phase Complete
+Last activity: 2026-02-15 -- Completed 02-02-PLAN.md
 
-Progress: [############------] 67%
+Progress: [################--] 83%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 5min
-- Total execution time: 0.32 hours
+- Total plans completed: 5
+- Average duration: 4min
+- Total execution time: 0.37 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-audio-engine-score-foundation | 3/3 | 16min | 5min |
-| 02-ensemble-ai | 1/2 | 3min | 3min |
+| 02-ensemble-ai | 2/2 | 5min | 2.5min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (4min), 01-02 (2min), 01-03 (10min), 02-01 (3min)
+- Last 5 plans: 01-01 (4min), 01-02 (2min), 01-03 (10min), 02-01 (3min), 02-02 (2min)
 - Trend: Fast
 
 *Updated after each plan completion*
@@ -59,6 +59,10 @@ Recent decisions affecting current work:
 - [02-01]: Minimum active floor of 2 playing performers prevents dropout cascades
 - [02-01]: Endgame dropout is permanent (status='complete') vs normal dropout (status='silent')
 - [02-01]: _mutableState accessor on PerformerAgent for direct test state manipulation
+- [02-02]: Scheduler advances exactly one eighth note per tick (fixed beat clock) rather than variable note durations
+- [02-02]: Voice pool sized at 2x performer count (16 voices for 8 performers) for headroom
+- [02-02]: Global voice claim/release handles multi-performer contention naturally via voice stealing
+- [02-02]: Performer grid uses CSS opacity transitions for playing/silent/complete states
 
 ### Pending Todos
 
@@ -71,8 +75,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-14
-Stopped at: Completed 02-01-PLAN.md (Ensemble AI core: PerformerAgent with weighted decisions, band enforcement, dropout/rejoin, endgame logic)
+Last session: 2026-02-15
+Stopped at: Completed 02-02-PLAN.md (Ensemble-Audio integration: beat clock scheduler, 16-voice pool, per-performer UI grid)
 Resume file: None
 
-**Phase 2 In Progress** - Plan 02-01 complete, ready for 02-02 (Ensemble-Audio integration)
+**Phase 2 COMPLETE** - Full multi-performer In C performance with ensemble AI driving all musical decisions. Ready for Phase 3.
