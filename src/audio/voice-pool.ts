@@ -13,8 +13,10 @@ export class VoicePool {
   private available: Set<number>;
   private claimOrder: number[] = [];
   private masterGain: GainNode;
+  private audioContext: AudioContext;
 
   constructor(audioContext: AudioContext, size: number = 4) {
+    this.audioContext = audioContext;
     this.voices = [];
     this.available = new Set();
 
@@ -71,6 +73,34 @@ export class VoicePool {
       this.available.add(i);
     }
     this.claimOrder = [];
+  }
+
+  /**
+   * Resize the voice pool. Growing creates new AudioWorkletNodes.
+   * Shrinking only removes unclaimed voices from the available set;
+   * currently claimed voices are left alone until released.
+   */
+  resize(newSize: number): void {
+    const currentSize = this.voices.length;
+
+    if (newSize > currentSize) {
+      // Grow: create additional AudioWorkletNode instances
+      for (let i = currentSize; i < newSize; i++) {
+        const node = new AudioWorkletNode(this.audioContext, 'synth-processor');
+        node.connect(this.masterGain);
+        this.voices.push(node);
+        this.available.add(i);
+      }
+    } else if (newSize < currentSize) {
+      // Shrink: remove excess voices from available pool only
+      // Claimed voices stay until released; actual node cleanup deferred
+      for (let i = newSize; i < currentSize; i++) {
+        this.available.delete(i);
+      }
+    }
+
+    // Update master gain for new voice count
+    this.masterGain.gain.value = Math.min(1.0, 2.5 / newSize);
   }
 
   /** Number of voices in the pool. */

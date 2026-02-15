@@ -1,3 +1,5 @@
+import { Button } from '@/components/ui/button';
+
 interface TransportProps {
   playing: boolean;
   onStart: () => void;
@@ -7,28 +9,28 @@ interface TransportProps {
 
 export function Transport({ playing, onStart, onStop, onReset }: TransportProps) {
   return (
-    <div className="transport">
-      <button
-        className="transport-btn start-btn"
+    <div className="flex gap-3">
+      <Button
+        variant="outline"
         onClick={onStart}
         disabled={playing}
       >
         Start
-      </button>
-      <button
-        className="transport-btn"
+      </Button>
+      <Button
+        variant="outline"
         onClick={onStop}
         disabled={!playing}
       >
         Stop
-      </button>
-      <button
-        className="transport-btn"
+      </Button>
+      <Button
+        variant="outline"
         onClick={onReset}
         disabled={playing}
       >
         Reset
-      </button>
+      </Button>
     </div>
   );
 }

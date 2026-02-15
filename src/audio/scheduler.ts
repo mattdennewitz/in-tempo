@@ -13,6 +13,9 @@
 import type { EnsembleEngineState } from './types.ts';
 import type { VoicePool } from './voice-pool.ts';
 import type { Ensemble } from '../score/ensemble.ts';
+import type { SamplePlayer } from './sampler.ts';
+import type { PulseGenerator } from './pulse.ts';
+import { assignInstrument } from './sampler.ts';
 import { midiToFrequency } from '../score/patterns.ts';
 
 const SCHEDULE_AHEAD_TIME = 0.1; // 100ms lookahead
@@ -22,6 +25,8 @@ export class Scheduler {
   private audioContext: AudioContext;
   private voicePool: VoicePool;
   private ensemble: Ensemble;
+  private samplePlayer: SamplePlayer;
+  private pulseGenerator: PulseGenerator;
 
   private nextNoteTime: number = 0;
   private _bpm: number = 120;
@@ -31,10 +36,18 @@ export class Scheduler {
 
   onStateChange: ((state: EnsembleEngineState) => void) | null = null;
 
-  constructor(audioContext: AudioContext, voicePool: VoicePool, ensemble: Ensemble) {
+  constructor(
+    audioContext: AudioContext,
+    voicePool: VoicePool,
+    ensemble: Ensemble,
+    samplePlayer: SamplePlayer,
+    pulseGenerator: PulseGenerator,
+  ) {
     this.audioContext = audioContext;
     this.voicePool = voicePool;
     this.ensemble = ensemble;
+    this.samplePlayer = samplePlayer;
+    this.pulseGenerator = pulseGenerator;
   }
 
   /** Start the scheduling loop. */
@@ -92,10 +105,13 @@ export class Scheduler {
       ensembleComplete: this.ensemble.isComplete,
       totalPatterns: this.ensemble.totalPatterns,
       scoreMode: this.ensemble.scoreMode,
+      pulseEnabled: this.pulseGenerator.enabled,
+      performerCount: this.ensemble.agentCount,
     };
   }
 
-  private fireStateChange(): void {
+  /** Fire state change callback. Public so Engine can trigger after add/remove performer. */
+  fireStateChange(): void {
     if (this.onStateChange) {
       this.onStateChange(this.getState());
     }
@@ -116,8 +132,18 @@ export class Scheduler {
   };
 
   /**
+   * Toggle the pulse generator on/off. Returns the new enabled state.
+   */
+  togglePulse(): boolean {
+    this.pulseGenerator.enabled = !this.pulseGenerator.enabled;
+    this.fireStateChange();
+    return this.pulseGenerator.enabled;
+  }
+
+  /**
    * Schedule one beat (eighth note). Polls the Ensemble for all performer
-   * events and schedules them via the voice pool.
+   * events and routes them to the appropriate instrument (synth voice pool
+   * or sampled instrument).
    */
   private scheduleBeat(time: number): void {
     const events = this.ensemble.tick();
@@ -133,31 +159,43 @@ export class Scheduler {
     for (const event of events) {
       if (event.midi === 0) continue;
 
-      // Claim a voice and schedule the note
-      const voice = this.voicePool.claim();
-      const frequency = midiToFrequency(event.midi);
-
-      // Cancel any pending release timer for this voice
-      const existingTimer = this.releaseTimers.get(voice.index);
-      if (existingTimer !== undefined) {
-        clearTimeout(existingTimer);
-        this.releaseTimers.delete(voice.index);
-      }
-
-      voice.node.port.postMessage({ type: 'noteOn', frequency });
-
-      // Schedule release after event.duration eighth notes
+      const instrument = assignInstrument(event.performerId);
       const noteDurationSeconds = event.duration * secondsPerEighth;
-      const noteEndTime = time + noteDurationSeconds;
-      const delayMs = Math.max(0, (noteEndTime - this.audioContext.currentTime) * 1000);
 
-      const releaseTimer = setTimeout(() => {
-        voice.node.port.postMessage({ type: 'noteOff' });
-        this.voicePool.release(voice.index);
-        this.releaseTimers.delete(voice.index);
-      }, delayMs);
+      if (instrument === 'synth') {
+        // Route through VoicePool (AudioWorklet synth voices)
+        const voice = this.voicePool.claim();
+        const frequency = midiToFrequency(event.midi);
 
-      this.releaseTimers.set(voice.index, releaseTimer);
+        // Cancel any pending release timer for this voice
+        const existingTimer = this.releaseTimers.get(voice.index);
+        if (existingTimer !== undefined) {
+          clearTimeout(existingTimer);
+          this.releaseTimers.delete(voice.index);
+        }
+
+        voice.node.port.postMessage({ type: 'noteOn', frequency, time });
+
+        // Schedule release after event.duration eighth notes
+        const noteEndTime = time + noteDurationSeconds;
+        const delayMs = Math.max(0, (noteEndTime - this.audioContext.currentTime) * 1000);
+
+        const releaseTimer = setTimeout(() => {
+          voice.node.port.postMessage({ type: 'noteOff' });
+          this.voicePool.release(voice.index);
+          this.releaseTimers.delete(voice.index);
+        }, delayMs);
+
+        this.releaseTimers.set(voice.index, releaseTimer);
+      } else {
+        // Route through SamplePlayer (smplr piano/marimba)
+        this.samplePlayer.play(instrument, event.midi, time, noteDurationSeconds);
+      }
+    }
+
+    // Schedule pulse if enabled
+    if (this.pulseGenerator.enabled) {
+      this.pulseGenerator.schedulePulse(time, secondsPerEighth);
     }
 
     this.fireStateChange();

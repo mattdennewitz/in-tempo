@@ -5,6 +5,7 @@ import { ScoreModeSelector } from './components/ScoreModeSelector.tsx';
 import { Transport } from './components/Transport.tsx';
 import { BpmSlider } from './components/BpmSlider.tsx';
 import { PatternDisplay } from './components/PatternDisplay.tsx';
+import { PerformerControls } from './components/PerformerControls.tsx';
 import './App.css';
 
 const INITIAL_STATE: EnsembleEngineState = {
@@ -14,6 +15,8 @@ const INITIAL_STATE: EnsembleEngineState = {
   ensembleComplete: false,
   totalPatterns: 53,
   scoreMode: 'riley',
+  pulseEnabled: false,
+  performerCount: 8,
 };
 
 function App() {
@@ -50,11 +53,30 @@ function App() {
     engineRef.current.setScoreMode(mode);
   }, []);
 
+  const handleAddPerformer = useCallback(() => {
+    if (engineState.playing) {
+      engineRef.current.addPerformer();
+    } else {
+      engineRef.current.setPerformerCount((engineState.performerCount ?? 8) + 1);
+      setEngineState(prev => ({ ...prev, performerCount: Math.min(16, (prev.performerCount ?? 8) + 1) }));
+    }
+  }, [engineState.playing, engineState.performerCount]);
+
+  const handleRemovePerformer = useCallback((id: number) => {
+    if (engineState.playing) {
+      engineRef.current.removePerformer(id);
+    } else {
+      engineRef.current.setPerformerCount((engineState.performerCount ?? 8) - 1);
+      setEngineState(prev => ({ ...prev, performerCount: Math.max(2, (prev.performerCount ?? 8) - 1) }));
+    }
+  }, [engineState.playing, engineState.performerCount]);
+
   return (
-    <div className="app">
+    <div className="flex flex-col items-center justify-center min-h-screen gap-8 p-8">
       <ScoreModeSelector
         currentMode={engineState.scoreMode}
         onChange={handleModeChange}
+        disabled={engineState.playing}
       />
       <PatternDisplay
         performers={engineState.performers}
@@ -68,6 +90,13 @@ function App() {
         onStart={handleStart}
         onStop={handleStop}
         onReset={handleReset}
+      />
+      <PerformerControls
+        onAdd={handleAddPerformer}
+        onRemove={handleRemovePerformer}
+        performers={engineState.performers}
+        disabled={false}
+        count={engineState.playing ? undefined : engineState.performerCount}
       />
       <BpmSlider
         bpm={engineState.bpm}
