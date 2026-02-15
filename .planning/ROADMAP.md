@@ -10,7 +10,7 @@ InTempo delivers a browser-based generative performance engine in four phases: f
 - Integer phases (1, 2, 3, 4): Planned milestone work
 - Decimal phases (e.g., 2.1): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Audio Engine + Score Foundation** - Precisely timed audio scheduler, Riley's 53 patterns, basic synth, transport controls
+- [x] **Phase 1: Audio Engine + Score Foundation** - Precisely timed audio scheduler, Riley's 53 patterns, basic synth, transport controls
 - [ ] **Phase 2: Ensemble AI** - Multiple performers with believable musical behavior navigating the shared score
 - [ ] **Phase 3: Visualization + Instruments + Polish** - Canvas performer display, sampled instruments, visual identity, dynamic performer management
 - [ ] **Phase 4: Composition Modes** - Generative and Euclidean alternative score modes
@@ -44,11 +44,11 @@ Plans:
   3. Performers periodically align on the same pattern (unison moments) then spread apart again
   4. Performers go silent for stretches then rejoin, creating natural breathing in the texture
   5. When the last pattern is reached, performers drop out one by one until silence -- the performance ends itself
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md -- Ensemble AI core: PerformerAgent, weighted decisions, band enforcement, dropout/rejoin, unison seeking, endgame (TDD)
+- [ ] 02-02-PLAN.md -- Scheduler beat clock refactor, voice pool scaling, AudioEngine ensemble management, multi-performer UI
 
 ### Phase 3: Visualization + Instruments + Polish
 **Goal**: Each performer is visually represented on a styled canvas, instruments include sampled sounds, and the user can dynamically manage the ensemble
@@ -60,11 +60,12 @@ Plans:
   3. User can add and remove performers during a running performance and hear/see the change immediately
   4. Some performers play sampled instrument sounds (piano, marimba) while others play synth -- the mix is audibly varied
   5. A steady eighth-note pulse on high C is toggleable by the user
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md -- Canvas performer visualization, visual identity (GT Canon font, salmon/cream/navy palette), score mode selector
+- [ ] 03-02-PLAN.md -- Sampled instruments (piano, marimba via smplr), toggleable eighth-note pulse on high C
+- [ ] 03-03-PLAN.md -- Dynamic performer management (add/remove during playback), VoicePool resize, ensemble mutation queueing
 
 ### Phase 4: Composition Modes
 **Goal**: Users can choose between Riley's original score, algorithmically generated patterns, or Euclidean rhythm patterns before starting a performance
@@ -86,7 +87,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Audio Engine + Score Foundation | 0/3 | Planned | - |
-| 2. Ensemble AI | 0/TBD | Not started | - |
-| 3. Visualization + Instruments + Polish | 0/TBD | Not started | - |
+| 1. Audio Engine + Score Foundation | 3/3 | Complete | 2026-02-14 |
+| 2. Ensemble AI | 0/2 | Not started | - |
+| 3. Visualization + Instruments + Polish | 0/3 | Not started | - |
 | 4. Composition Modes | 0/TBD | Not started | - |

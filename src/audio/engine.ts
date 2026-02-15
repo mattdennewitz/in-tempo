@@ -1,28 +1,33 @@
 /**
  * AudioEngine - Facade class exposing a clean API for React.
  *
- * Owns the AudioContext, loads the AudioWorklet module, creates the voice pool
- * and scheduler, and provides start/stop/reset/setBpm controls.
+ * Owns the AudioContext, loads the AudioWorklet module, creates the voice pool,
+ * ensemble, and scheduler, and provides start/stop/reset/setBpm controls.
  *
  * Completely framework-agnostic: no React imports, no DOM access.
  */
-import type { EngineState } from './types.ts';
+import type { EnsembleEngineState } from './types.ts';
 import { VoicePool } from './voice-pool.ts';
 import { Scheduler } from './scheduler.ts';
-import { Performer } from '../score/performer.ts';
+import { SamplePlayer } from './sampler.ts';
+import { PulseGenerator } from './pulse.ts';
+import { Ensemble } from '../score/ensemble.ts';
 import { PATTERNS } from '../score/patterns.ts';
 
 export class AudioEngine {
   private audioContext: AudioContext | null = null;
   private voicePool: VoicePool | null = null;
   private scheduler: Scheduler | null = null;
-  private performer: Performer | null = null;
+  private ensemble: Ensemble | null = null;
+  private samplePlayer: SamplePlayer | null = null;
+  private pulseGenerator: PulseGenerator | null = null;
   private initialized: boolean = false;
-  private pendingOnStateChange: ((state: EngineState) => void) | null = null;
+  private pendingOnStateChange: ((state: EnsembleEngineState) => void) | null = null;
+  private initialPerformerCount = 8;
 
   /**
    * Initialize the audio subsystem: create AudioContext, load worklet module,
-   * create voice pool, performer, and scheduler.
+   * create voice pool, ensemble, and scheduler.
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
@@ -30,9 +35,23 @@ export class AudioEngine {
     this.audioContext = new AudioContext();
     await this.audioContext.audioWorklet.addModule('/synth-processor.js');
 
-    this.voicePool = new VoicePool(this.audioContext, 4);
-    this.performer = new Performer(PATTERNS);
-    this.scheduler = new Scheduler(this.audioContext, this.voicePool, this.performer);
+    this.ensemble = new Ensemble(this.initialPerformerCount, PATTERNS);
+    this.voicePool = new VoicePool(this.audioContext, this.initialPerformerCount * 2);
+
+    // Initialize sampled instruments (loads from CDN)
+    this.samplePlayer = new SamplePlayer(this.audioContext);
+    await this.samplePlayer.initialize();
+
+    // Initialize pulse generator
+    this.pulseGenerator = new PulseGenerator(this.audioContext);
+
+    this.scheduler = new Scheduler(
+      this.audioContext,
+      this.voicePool,
+      this.ensemble,
+      this.samplePlayer,
+      this.pulseGenerator,
+    );
 
     // Apply any callback that was set before initialization
     if (this.pendingOnStateChange) {
@@ -60,28 +79,72 @@ export class AudioEngine {
     this.scheduler!.start();
   }
 
-  /** Stop playback. Lets current note ring out. */
+  /** Stop playback. Lets current notes ring out. */
   stop(): void {
     this.scheduler?.stop();
   }
 
-  /** Stop playback, silence all voices, and reset performer to pattern 1. */
+  /** Stop playback, silence all voices, and reset ensemble to initial state. */
   reset(): void {
     this.scheduler?.reset();
   }
 
-  /** Set BPM (clamped to 100-180). Takes effect on next note. */
+  /** Set BPM (clamped to 100-180). Takes effect on next beat. */
   setBpm(bpm: number): void {
     this.scheduler?.setBpm(bpm);
   }
 
-  /** Get current engine state (playing, currentPattern, bpm). */
-  getState(): EngineState {
-    return this.scheduler?.getState() ?? { playing: false, currentPattern: 1, bpm: 120 };
+  /** Add a new performer during playback. Returns the new performer's id, or null if not initialized. */
+  addPerformer(): number | null {
+    if (!this.initialized || !this.ensemble || !this.voicePool) return null;
+    const id = this.ensemble.addAgent();
+    this.voicePool.resize(this.ensemble.agentCount * 2);
+    // Fire state change so UI updates
+    this.scheduler?.fireStateChange();
+    return id;
+  }
+
+  /** Remove a performer by id. Returns false if not initialized or performer not found. */
+  removePerformer(id: number): boolean {
+    if (!this.initialized || !this.ensemble) return false;
+    const result = this.ensemble.removeAgent(id);
+    if (result) {
+      // Voice pool does NOT shrink (excess voices stay available -- avoids glitches)
+      this.scheduler?.fireStateChange();
+    }
+    return result;
+  }
+
+  /** Get current performer count. */
+  get performerCount(): number {
+    return this.ensemble?.agentCount ?? this.initialPerformerCount;
+  }
+
+  /** Set initial performer count (before playback starts). No-op if already initialized. */
+  setPerformerCount(count: number): void {
+    if (this.initialized) return;
+    this.initialPerformerCount = Math.max(2, Math.min(16, count));
+  }
+
+  /** Toggle the eighth-note high C pulse. Returns new enabled state. */
+  togglePulse(): boolean {
+    return this.scheduler?.togglePulse() ?? false;
+  }
+
+  /** Get current ensemble engine state. */
+  getState(): EnsembleEngineState {
+    return this.scheduler?.getState() ?? {
+      playing: false,
+      bpm: 120,
+      performers: [],
+      ensembleComplete: false,
+      pulseEnabled: false,
+      performerCount: 8,
+    };
   }
 
   /** Set state change callback. Passes through to scheduler, or stores for later. */
-  set onStateChange(cb: ((state: EngineState) => void) | null) {
+  set onStateChange(cb: ((state: EnsembleEngineState) => void) | null) {
     if (this.scheduler) {
       this.scheduler.onStateChange = cb;
     } else {
@@ -93,13 +156,17 @@ export class AudioEngine {
   dispose(): void {
     this.scheduler?.reset();
     this.voicePool?.dispose();
+    this.samplePlayer?.dispose();
+    this.pulseGenerator?.dispose();
     if (this.audioContext && this.audioContext.state !== 'closed') {
       this.audioContext.close();
     }
     this.audioContext = null;
     this.voicePool = null;
     this.scheduler = null;
-    this.performer = null;
+    this.ensemble = null;
+    this.samplePlayer = null;
+    this.pulseGenerator = null;
     this.pendingOnStateChange = null;
     this.initialized = false;
   }

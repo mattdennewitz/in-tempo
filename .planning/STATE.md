@@ -5,33 +5,35 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** Ensemble behavior must feel alive -- performers making believable musical decisions over a precisely timed audio engine, so each performance is unique and compelling.
-**Current focus:** Phase 1 - Audio Engine + Score Foundation
+**Current focus:** Phase 3 COMPLETE -- Visualization, Instruments, Polish
 
 ## Current Position
 
-Phase: 1 of 4 (Audio Engine + Score Foundation)
-Plan: 3 of 3 in current phase
+Phase: 3 of 4 (Visualization, Instruments, Polish) -- COMPLETE
+Plan: 3 of 3 in current phase -- COMPLETE
 Status: Phase Complete
-Last activity: 2026-02-14 -- Completed 01-03-PLAN.md
+Last activity: 2026-02-15 -- Completed 03-03-PLAN.md
 
-Progress: [##########] 100%
+Progress: [####################] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 5min
-- Total execution time: 0.27 hours
+- Total plans completed: 8
+- Average duration: 4min
+- Total execution time: 0.53 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-audio-engine-score-foundation | 3/3 | 16min | 5min |
+| 02-ensemble-ai | 2/2 | 5min | 2.5min |
+| 03-visualization-instruments-polish | 3/3 | 10min | 3.3min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (4min), 01-02 (2min), 01-03 (10min)
-- Trend: Stabilizing
+- Last 5 plans: 02-01 (3min), 02-02 (2min), 03-01 (2min), 03-02 (3min), 03-03 (5min)
+- Trend: Fast
 
 *Updated after each plan completion*
 
@@ -53,6 +55,25 @@ Recent decisions affecting current work:
 - [01-03]: AudioEngine stored in useRef for framework-agnostic persistence across renders
 - [01-03]: Pattern display shows contextual states (Ready/Pattern N/Performance Complete)
 - [01-03]: 5ms exponential attack ramp eliminates click artifacts at note onset
+- [02-01]: Immutable frozen snapshots per tick prevent order-of-evaluation bugs across agents
+- [02-01]: Band enforcement is hard override after weighted choice (not weight modifier)
+- [02-01]: Minimum active floor of 2 playing performers prevents dropout cascades
+- [02-01]: Endgame dropout is permanent (status='complete') vs normal dropout (status='silent')
+- [02-01]: _mutableState accessor on PerformerAgent for direct test state manipulation
+- [02-02]: Scheduler advances exactly one eighth note per tick (fixed beat clock) rather than variable note durations
+- [02-02]: Voice pool sized at 2x performer count (16 voices for 8 performers) for headroom
+- [02-02]: Global voice claim/release handles multi-performer contention naturally via voice stealing
+- [02-02]: Performer grid uses CSS opacity transitions for playing/silent/complete states
+- [03-01]: Canvas rAF loop reads from ref (not React state) to avoid render-loop coupling
+- [03-01]: STATE_COLORS separated from base PALETTE for clean renderer code
+- [03-01]: ScoreModeSelector uses native select element with disabled options for simplicity
+- [03-02]: Deterministic instrument assignment via performerId % 3 for stable, varied timbres
+- [03-02]: SamplePlayer routes through shared GainNode at 0.6 to balance with synth voices
+- [03-02]: Pulse uses fresh OscillatorNode per beat with auto-disconnect for zero memory growth
+- [03-03]: Pending removals processed at start of tick() before snapshot -- zero mid-iteration mutation risk
+- [03-03]: VoicePool only grows, never shrinks -- excess voices stay available to avoid audio glitches
+- [03-03]: New performers start at ensemble minimum pattern index for musical blending
+- [03-03]: Scheduler.fireStateChange() made public so Engine can trigger UI updates after add/remove
 
 ### Pending Todos
 
@@ -61,12 +82,12 @@ None yet.
 ### Blockers/Concerns
 
 - GT Canon font files need to be provided by user before Phase 3 visual identity work
-- Sampled instrument audio files (piano, marimba) need to be sourced before Phase 3 instrument work
+- ~~Sampled instrument audio files~~ RESOLVED: smplr loads piano/marimba from CDN at runtime
 
 ## Session Continuity
 
-Last session: 2026-02-14
-Stopped at: Completed 01-03-PLAN.md (Phase 1 complete: single-performer In C application with transport controls, BPM slider, pattern display)
+Last session: 2026-02-15
+Stopped at: Completed 03-03-PLAN.md (Dynamic performer add/remove with mutation queueing and VoicePool resize)
 Resume file: None
 
-**Phase 1 Complete** - Ready to begin Phase 2 (Ensemble AI) when user initiates next planning session
+**Phase 3 COMPLETE** - Canvas visualization, sampled instruments, and dynamic performer management all done. Ready for Phase 4 (alternate composition modes).

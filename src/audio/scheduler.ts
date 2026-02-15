@@ -1,17 +1,21 @@
 /**
- * Scheduler - Lookahead scheduler using the Chris Wilson "Two Clocks" pattern.
+ * Scheduler - Fixed eighth-note beat clock polling the Ensemble.
  *
  * A setTimeout loop on the main thread checks AudioContext.currentTime and
- * schedules upcoming notes within a lookahead window. Audio events execute
- * with sample-accurate timing on the audio thread via AudioWorklet messages.
+ * schedules upcoming notes within a lookahead window. Each tick advances by
+ * exactly one eighth note and polls the Ensemble for note events from all
+ * performers.
  *
  * Key parameters:
  * - SCHEDULE_AHEAD_TIME: 100ms lookahead window
  * - TIMER_INTERVAL: 25ms setTimeout interval (4 chances per window)
  */
-import type { EngineState, ScoreNote } from './types.ts';
+import type { EnsembleEngineState } from './types.ts';
 import type { VoicePool } from './voice-pool.ts';
-import type { Performer } from '../score/performer.ts';
+import type { Ensemble } from '../score/ensemble.ts';
+import type { SamplePlayer } from './sampler.ts';
+import type { PulseGenerator } from './pulse.ts';
+import { assignInstrument } from './sampler.ts';
 import { midiToFrequency } from '../score/patterns.ts';
 
 const SCHEDULE_AHEAD_TIME = 0.1; // 100ms lookahead
@@ -20,21 +24,30 @@ const TIMER_INTERVAL = 25; // 25ms timer interval
 export class Scheduler {
   private audioContext: AudioContext;
   private voicePool: VoicePool;
-  private performer: Performer;
+  private ensemble: Ensemble;
+  private samplePlayer: SamplePlayer;
+  private pulseGenerator: PulseGenerator;
 
   private nextNoteTime: number = 0;
   private _bpm: number = 120;
   private _playing: boolean = false;
   private timerId: ReturnType<typeof setTimeout> | null = null;
-  private lastScheduledNote: ScoreNote | null = null;
   private releaseTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
 
-  onStateChange: ((state: EngineState) => void) | null = null;
+  onStateChange: ((state: EnsembleEngineState) => void) | null = null;
 
-  constructor(audioContext: AudioContext, voicePool: VoicePool, performer: Performer) {
+  constructor(
+    audioContext: AudioContext,
+    voicePool: VoicePool,
+    ensemble: Ensemble,
+    samplePlayer: SamplePlayer,
+    pulseGenerator: PulseGenerator,
+  ) {
     this.audioContext = audioContext;
     this.voicePool = voicePool;
-    this.performer = performer;
+    this.ensemble = ensemble;
+    this.samplePlayer = samplePlayer;
+    this.pulseGenerator = pulseGenerator;
   }
 
   /** Start the scheduling loop. */
@@ -58,7 +71,7 @@ export class Scheduler {
     this.fireStateChange();
   }
 
-  /** Hard stop: silence everything and reset performer to pattern 1. */
+  /** Hard stop: silence everything and reset ensemble to initial state. */
   reset(): void {
     this.stop();
     // Clear all pending release timers
@@ -67,28 +80,31 @@ export class Scheduler {
     }
     this.releaseTimers.clear();
     this.voicePool.stopAll();
-    this.performer.reset();
+    this.ensemble.reset();
     this._bpm = 120;
-    this.lastScheduledNote = null;
     this.fireStateChange();
   }
 
-  /** Set BPM, clamped to 100-180 range. Takes effect on next note. */
+  /** Set BPM, clamped to 100-180 range. Takes effect on next beat. */
   setBpm(bpm: number): void {
     this._bpm = Math.max(100, Math.min(180, bpm));
     this.fireStateChange();
   }
 
-  /** Get current engine state. */
-  getState(): EngineState {
+  /** Get current ensemble engine state. */
+  getState(): EnsembleEngineState {
     return {
       playing: this._playing,
-      currentPattern: this.performer.currentPattern,
       bpm: this._bpm,
+      performers: this.ensemble.performerStates,
+      ensembleComplete: this.ensemble.isComplete,
+      pulseEnabled: this.pulseGenerator.enabled,
+      performerCount: this.ensemble.agentCount,
     };
   }
 
-  private fireStateChange(): void {
+  /** Fire state change callback. Public so Engine can trigger after add/remove performer. */
+  fireStateChange(): void {
     if (this.onStateChange) {
       this.onStateChange(this.getState());
     }
@@ -96,11 +112,11 @@ export class Scheduler {
 
   /**
    * The lookahead tick loop. Runs via setTimeout at TIMER_INTERVAL.
-   * Schedules all notes falling within the lookahead window.
+   * Each tick advances by exactly one eighth note and polls the Ensemble.
    */
   private tick = (): void => {
     while (this.nextNoteTime < this.audioContext.currentTime + SCHEDULE_AHEAD_TIME) {
-      this.scheduleNote(this.nextNoteTime);
+      this.scheduleBeat(this.nextNoteTime);
       this.advanceTime();
     }
     if (this._playing) {
@@ -109,64 +125,80 @@ export class Scheduler {
   };
 
   /**
-   * Schedule a single note at the given AudioContext time.
-   * Handles rests (midi=0), performance completion, and voice management.
+   * Toggle the pulse generator on/off. Returns the new enabled state.
    */
-  private scheduleNote(time: number): void {
-    const note = this.performer.nextNote();
-    this.lastScheduledNote = note;
+  togglePulse(): boolean {
+    this.pulseGenerator.enabled = !this.pulseGenerator.enabled;
+    this.fireStateChange();
+    return this.pulseGenerator.enabled;
+  }
 
-    if (note === null) {
-      // Performance complete
+  /**
+   * Schedule one beat (eighth note). Polls the Ensemble for all performer
+   * events and routes them to the appropriate instrument (synth voice pool
+   * or sampled instrument).
+   */
+  private scheduleBeat(time: number): void {
+    const events = this.ensemble.tick();
+
+    // Check for ensemble completion
+    if (this.ensemble.isComplete) {
       this.stop();
       return;
     }
 
-    // Rest: do nothing (time still advances via advanceTime)
-    if (note.midi === 0) {
-      this.fireStateChange();
-      return;
+    const secondsPerEighth = 60 / (this._bpm * 2);
+
+    for (const event of events) {
+      if (event.midi === 0) continue;
+
+      const instrument = assignInstrument(event.performerId);
+      const noteDurationSeconds = event.duration * secondsPerEighth;
+
+      if (instrument === 'synth') {
+        // Route through VoicePool (AudioWorklet synth voices)
+        const voice = this.voicePool.claim();
+        const frequency = midiToFrequency(event.midi);
+
+        // Cancel any pending release timer for this voice
+        const existingTimer = this.releaseTimers.get(voice.index);
+        if (existingTimer !== undefined) {
+          clearTimeout(existingTimer);
+          this.releaseTimers.delete(voice.index);
+        }
+
+        voice.node.port.postMessage({ type: 'noteOn', frequency, time });
+
+        // Schedule release after event.duration eighth notes
+        const noteEndTime = time + noteDurationSeconds;
+        const delayMs = Math.max(0, (noteEndTime - this.audioContext.currentTime) * 1000);
+
+        const releaseTimer = setTimeout(() => {
+          voice.node.port.postMessage({ type: 'noteOff' });
+          this.voicePool.release(voice.index);
+          this.releaseTimers.delete(voice.index);
+        }, delayMs);
+
+        this.releaseTimers.set(voice.index, releaseTimer);
+      } else {
+        // Route through SamplePlayer (smplr piano/marimba)
+        this.samplePlayer.play(instrument, event.midi, time, noteDurationSeconds);
+      }
     }
 
-    // Claim a voice and schedule the note
-    const voice = this.voicePool.claim();
-    const frequency = midiToFrequency(note.midi);
-
-    // Cancel any pending release timer for this voice (prevents race condition
-    // when voice is stolen: old timer would otherwise noteOff the new note)
-    const existingTimer = this.releaseTimers.get(voice.index);
-    if (existingTimer !== undefined) {
-      clearTimeout(existingTimer);
-      this.releaseTimers.delete(voice.index);
+    // Schedule pulse if enabled
+    if (this.pulseGenerator.enabled) {
+      this.pulseGenerator.schedulePulse(time, secondsPerEighth);
     }
 
-    voice.node.port.postMessage({ type: 'noteOn', frequency });
-
-    // Calculate note end time and schedule release
-    const noteDurationSeconds = (note.duration * 60) / (this._bpm * 2);
-    const noteEndTime = time + noteDurationSeconds;
-    const delayMs = Math.max(0, (noteEndTime - this.audioContext.currentTime) * 1000);
-
-    const releaseTimer = setTimeout(() => {
-      voice.node.port.postMessage({ type: 'noteOff' });
-      this.voicePool.release(voice.index);
-      this.releaseTimers.delete(voice.index);
-    }, delayMs);
-
-    this.releaseTimers.set(voice.index, releaseTimer);
     this.fireStateChange();
   }
 
   /**
-   * Advance nextNoteTime by the duration of the last scheduled note.
-   * Duration is in eighth notes; BPM is in quarter notes per minute.
+   * Advance nextNoteTime by exactly one eighth note.
    */
   private advanceTime(): void {
-    const note = this.lastScheduledNote;
-    const duration = note ? note.duration : 1;
-    // eighth-note duration: (duration * 60) / (bpm * 2)
-    // because bpm = quarter notes/min, and eighth = half a quarter
     const secondsPerEighth = 60 / (this._bpm * 2);
-    this.nextNoteTime += duration * secondsPerEighth;
+    this.nextNoteTime += secondsPerEighth;
   }
 }
