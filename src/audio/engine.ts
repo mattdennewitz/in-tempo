@@ -81,10 +81,13 @@ export class AudioEngine {
     this.scheduler.velocityConfigRef = { current: this.velocityConfig };
     this.scheduler.midiRecorder = this.midiRecorder;
 
-    // Apply any callback that was set before initialization
+    // Apply any callback that was set before initialization (wrap to overlay seed)
     if (this.pendingOnStateChange) {
-      this.scheduler.onStateChange = this.pendingOnStateChange;
-      this.pendingOnStateChange = null;
+      const cb = this.pendingOnStateChange;
+      this.scheduler.onStateChange = (state) => {
+        state.seed = this.currentSeed;
+        cb(state);
+      };
     }
 
     this.initialized = true;
@@ -155,7 +158,7 @@ export class AudioEngine {
     this.initialPerformerCount = Math.max(2, Math.min(16, count));
     if (this.initialized && !this.getState().playing) {
       // Rebuild ensemble with new count so next start() uses it
-      const callback = this.scheduler?.onStateChange ?? null;
+      const callback = this.pendingOnStateChange;
       this.scheduler?.reset();
       this.voicePool?.stopAll();
       this.voicePool?.resize(this.initialPerformerCount * 2);
@@ -177,7 +180,10 @@ export class AudioEngine {
       this.scheduler.velocityConfigRef = { current: this.velocityConfig };
       this.scheduler.midiRecorder = this.midiRecorder;
       if (callback) {
-        this.scheduler.onStateChange = callback;
+        this.scheduler.onStateChange = (state) => {
+          state.seed = this.currentSeed;
+          callback(state);
+        };
       }
       this.scheduler.fireStateChange();
     }
@@ -261,8 +267,8 @@ export class AudioEngine {
     this.currentPatterns = getPatternsForMode(mode, rng);
 
     if (this.initialized) {
-      // Preserve callback before tearing down old scheduler
-      const callback = this.scheduler?.onStateChange ?? this.pendingOnStateChange;
+      // Use raw callback (pendingOnStateChange), not the wrapped scheduler version
+      const callback = this.pendingOnStateChange;
 
       // Fully dispose old scheduler (clears tick timer + release timers)
       this.scheduler?.reset();
@@ -280,9 +286,12 @@ export class AudioEngine {
       this.scheduler.velocityConfigRef = { current: this.velocityConfig };
       this.scheduler.midiRecorder = this.midiRecorder;
 
-      // Reconnect callback and fire state change
+      // Reconnect callback (wrapped to overlay seed) and fire state change
       if (callback) {
-        this.scheduler.onStateChange = callback;
+        this.scheduler.onStateChange = (state) => {
+          state.seed = this.currentSeed;
+          callback(state);
+        };
         callback(this.getState());
       }
     } else if (this.pendingOnStateChange) {
@@ -301,12 +310,14 @@ export class AudioEngine {
     return this.currentPatterns.length;
   }
 
-  /** Set state change callback. Passes through to scheduler, or stores for later. */
+  /** Set state change callback. Wraps callback to overlay Engine-owned seed before reaching React. */
   set onStateChange(cb: ((state: EnsembleEngineState) => void) | null) {
+    this.pendingOnStateChange = cb;
     if (this.scheduler) {
-      this.scheduler.onStateChange = cb;
-    } else {
-      this.pendingOnStateChange = cb;
+      this.scheduler.onStateChange = cb ? (state) => {
+        state.seed = this.currentSeed;
+        cb(state);
+      } : null;
     }
   }
 
