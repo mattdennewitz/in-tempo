@@ -30,18 +30,20 @@ The ensemble behavior must feel alive — performers making believable musical d
 
 ### Active
 
-- [ ] Stereo spread — performers panned across the stereo field
-- [ ] GT Canon font throughout the UI (currently using Courier fallback)
-- [ ] Abstract geometry visualization of each performer's active pattern
-- [ ] Color palette inspired by Semafor / Financial Times (warm salmon, cream, dark navy)
+- [ ] MIDI file export of generated performances (downloadable .mid)
+- [ ] Velocity humanization — subtle per-note velocity variation in audio and MIDI
+- [ ] Default performer count reduced to 4
 
 ### Out of Scope
 
-- Real-time multiplayer (human performers over network) — too complex for v1
-- MIDI output — browser audio only for now
+- Real-time multiplayer (human performers over network) — too complex
 - Mobile-optimized layout — desktop-first
-- Recording/export to audio file — defer to v2
+- Recording/export to audio file (WAV/MP3) — MIDI export covers notation needs
 - User conducting/intervention during performance — spectator only by design
+- Stereo spread — deferred from v1.0
+- GT Canon font — deferred, Courier fallback works
+- Abstract geometry visualization — deferred from v1.0
+- Semafor/FT color palette — deferred from v1.0
 
 ## Context
 
@@ -72,5 +74,14 @@ Tech stack: React 19, Vite, shadcn/ui, Tailwind CSS v4, Web Audio API (AudioWork
 | smplr for sampled instruments | CDN-loaded piano/marimba samples — no local audio files needed | ✓ Good |
 | Bjorklund/Euclidean for rhythms | Mathematically even onset distribution produces world-music-style rhythms | ✓ Good |
 
+## Current Milestone: v1.1 MIDI
+
+**Goal:** Add MIDI file export, velocity humanization, and default to 4 performers
+
+**Target features:**
+- Export performance as .mid file at any point (during or after playback)
+- Subtle per-note velocity variation in both audio playback and MIDI output
+- Default performer count of 4
+
 ---
-*Last updated: 2026-02-15 after v1.0 milestone*
+*Last updated: 2026-02-15 after v1.1 milestone start*
