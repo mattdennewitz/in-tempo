@@ -5,30 +5,30 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Ensemble behavior must feel alive -- performers making believable musical decisions over a precisely timed audio engine, so each performance is unique and compelling.
-**Current focus:** Phase 5 complete -- ready for Phase 6 (MIDI Export)
+**Current focus:** Phase 6 in progress -- MIDI recording and export pipeline
 
 ## Current Position
 
-Phase: 5 of 6 (Velocity Humanization) -- COMPLETE
-Plan: 3 of 3 in current phase
-Status: Phase complete
-Last activity: 2026-02-15 -- Completed 05-03 humanization UI toggle & verification
+Phase: 6 of 6 (MIDI Export)
+Plan: 1 of 2 in current phase
+Status: Plan 01 complete
+Last activity: 2026-02-15 -- Completed 06-01 MIDI recording & export pipeline
 
-Progress: [█████░░░░░] 50%
+Progress: [██████████░░] 55%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11 (v1.0)
+- Total plans completed: 12 (v1.0)
 - Average duration: 3.5min
-- Total execution time: ~0.6 hours
+- Total execution time: ~0.7 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 5. Velocity | 3/3 | ~20min | ~7min |
-| 6. MIDI Export | - | - | - |
+| 6. MIDI Export | 1/2 | ~7min | ~7min |
 
 *Updated after each plan completion*
 
@@ -50,6 +50,9 @@ Recent decisions affecting current work:
 - [05-02]: CFG-01 applied: default 4 performers in engine.ts and App.tsx
 - [05-03]: HumanizationToggle uses aria-pressed pattern consistent with ScoreModeSelector
 - [05-03]: setPerformerCount rebuilt to rebuild ensemble when stopped (not just before first init)
+- [06-01]: startTick for absolute tick positioning in midi-writer-js NoteEvent
+- [06-01]: midiRecorder ref pattern on Scheduler (same as velocityConfigRef)
+- [06-01]: Ghost note trimming via beatIndex < stopBeat filter
 
 ### Pending Todos
 
@@ -62,5 +65,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 05-03-PLAN.md (humanization UI & verification) -- Phase 5 complete
+Stopped at: Completed 06-01-PLAN.md (MIDI recording & export pipeline)
 Resume file: None
