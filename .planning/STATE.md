@@ -5,34 +5,35 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Ensemble behavior must feel alive -- performers making believable musical decisions over a precisely timed audio engine, so each performance is unique and compelling.
-**Current focus:** Phase 7 — Seeded PRNG (deterministic performances via shared URL)
+**Current focus:** Phase 7 complete -- Seeded PRNG (deterministic performances via shared URL)
 
 ## Current Position
 
-Phase: 7 of 10 (Seeded PRNG)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-15 — Completed 07-01 (SeededRng + Math.random replacement)
+Phase: 7 of 10 (Seeded PRNG) -- COMPLETE
+Plan: 2 of 2 in current phase (done)
+Status: Phase complete
+Last activity: 2026-02-15 -- Completed 07-02 (Seed wiring + UI + URL sharing)
 
-Progress: [██████████████░░░░░░] 70% (16/16 v1.0+v1.1 plans complete, 1/2 phase 7)
+Progress: [███████████████░░░░░] 75% (16/16 v1.0+v1.1 plans complete, 2/2 phase 7)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 16 (v1.0: 11, v1.1: 5)
-- Average duration: —
-- Total execution time: —
+- Total plans completed: 18 (v1.0: 11, v1.1: 5, v1.2: 2)
+- Average duration: --
+- Total execution time: --
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1-4 (v1.0) | 11 | — | — |
-| 5-6 (v1.1) | 5 | — | — |
+| 1-4 (v1.0) | 11 | -- | -- |
+| 5-6 (v1.1) | 5 | -- | -- |
+| 7 (v1.2) | 2 | 8min | 4min |
 
 **Recent Trend:**
-- Last 5 plans: —
-- Trend: —
+- Last 5 plans: --
+- Trend: --
 
 *Updated after each plan completion*
 
@@ -48,6 +49,9 @@ Recent decisions affecting current work:
 - 07-01: Single PRNG stream shared across all agents (not per-agent streams)
 - 07-01: Module-level _rng pattern for generators, constructor injection for Ensemble
 - 07-01: All RNG params optional with Date.now() fallback (zero breaking changes)
+- 07-02: Engine owns the seed and overlays it on scheduler state (single source of truth)
+- 07-02: URL hash uses URLSearchParams for encoding seed+mode+bpm+count
+- 07-02: Hash cleared on reset, updated on start (not during playback changes)
 
 ### Pending Todos
 
@@ -55,12 +59,11 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 7: 30+ Math.random() call sites must ALL be replaced for determinism (silent failure if any missed)
 - Phase 8: Microtiming offsets must stay within 100ms lookahead window (clamp required)
 - Phase 9: smplr per-note destination routing needs runtime verification
 
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 07-01-PLAN.md (SeededRng class + all 32 Math.random replacements)
+Stopped at: Completed 07-02-PLAN.md (Seed wiring + SeedDisplay UI + URL hash sharing)
 Resume file: None
