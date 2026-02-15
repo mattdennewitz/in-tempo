@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Ensemble behavior must feel alive -- performers making believable musical decisions over a precisely timed audio engine, so each performance is unique and compelling.
-**Current focus:** Phase 7 complete -- Seeded PRNG (deterministic performances via shared URL)
+**Current focus:** Phase 7 complete -- Seeded PRNG (deterministic performances via shared URL, seed display bug fixed)
 
 ## Current Position
 
 Phase: 7 of 10 (Seeded PRNG) -- COMPLETE
-Plan: 2 of 2 in current phase (done)
+Plan: 3 of 3 in current phase (done)
 Status: Phase complete
-Last activity: 2026-02-15 -- Completed 07-02 (Seed wiring + UI + URL sharing)
+Last activity: 2026-02-15 -- Completed 07-03 (Seed display bug fix via callback wrapping)
 
-Progress: [███████████████░░░░░] 75% (16/16 v1.0+v1.1 plans complete, 2/2 phase 7)
+Progress: [███████████████░░░░░] 75% (16/16 v1.0+v1.1 plans complete, 3/3 phase 7)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 18 (v1.0: 11, v1.1: 5, v1.2: 2)
+- Total plans completed: 19 (v1.0: 11, v1.1: 5, v1.2: 3)
 - Average duration: --
 - Total execution time: --
 
@@ -29,7 +29,7 @@ Progress: [███████████████░░░░░] 75% (16
 |-------|-------|-------|----------|
 | 1-4 (v1.0) | 11 | -- | -- |
 | 5-6 (v1.1) | 5 | -- | -- |
-| 7 (v1.2) | 2 | 8min | 4min |
+| 7 (v1.2) | 3 | 10min | 3min |
 
 **Recent Trend:**
 - Last 5 plans: --
@@ -52,6 +52,8 @@ Recent decisions affecting current work:
 - 07-02: Engine owns the seed and overlays it on scheduler state (single source of truth)
 - 07-02: URL hash uses URLSearchParams for encoding seed+mode+bpm+count
 - 07-02: Hash cleared on reset, updated on start (not during playback changes)
+- 07-03: Callback wrapping pattern -- Engine wraps onStateChange at all scheduler assignment sites to overlay seed
+- 07-03: pendingOnStateChange is canonical raw callback; scheduler gets wrapped version to avoid double-nesting
 
 ### Pending Todos
 
@@ -65,5 +67,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 07-02-PLAN.md (Seed wiring + SeedDisplay UI + URL hash sharing)
+Stopped at: Completed 07-03-PLAN.md (Seed display bug fix via callback wrapping)
 Resume file: None
