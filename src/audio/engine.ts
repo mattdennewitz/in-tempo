@@ -9,6 +9,8 @@
 import type { EnsembleEngineState } from './types.ts';
 import { VoicePool } from './voice-pool.ts';
 import { Scheduler } from './scheduler.ts';
+import { SamplePlayer } from './sampler.ts';
+import { PulseGenerator } from './pulse.ts';
 import { Ensemble } from '../score/ensemble.ts';
 import { PATTERNS } from '../score/patterns.ts';
 
@@ -17,6 +19,8 @@ export class AudioEngine {
   private voicePool: VoicePool | null = null;
   private scheduler: Scheduler | null = null;
   private ensemble: Ensemble | null = null;
+  private samplePlayer: SamplePlayer | null = null;
+  private pulseGenerator: PulseGenerator | null = null;
   private initialized: boolean = false;
   private pendingOnStateChange: ((state: EnsembleEngineState) => void) | null = null;
   private performerCount = 8;
@@ -33,7 +37,21 @@ export class AudioEngine {
 
     this.ensemble = new Ensemble(this.performerCount, PATTERNS);
     this.voicePool = new VoicePool(this.audioContext, this.performerCount * 2);
-    this.scheduler = new Scheduler(this.audioContext, this.voicePool, this.ensemble);
+
+    // Initialize sampled instruments (loads from CDN)
+    this.samplePlayer = new SamplePlayer(this.audioContext);
+    await this.samplePlayer.initialize();
+
+    // Initialize pulse generator
+    this.pulseGenerator = new PulseGenerator(this.audioContext);
+
+    this.scheduler = new Scheduler(
+      this.audioContext,
+      this.voicePool,
+      this.ensemble,
+      this.samplePlayer,
+      this.pulseGenerator,
+    );
 
     // Apply any callback that was set before initialization
     if (this.pendingOnStateChange) {
@@ -76,6 +94,11 @@ export class AudioEngine {
     this.scheduler?.setBpm(bpm);
   }
 
+  /** Toggle the eighth-note high C pulse. Returns new enabled state. */
+  togglePulse(): boolean {
+    return this.scheduler?.togglePulse() ?? false;
+  }
+
   /** Get current ensemble engine state. */
   getState(): EnsembleEngineState {
     return this.scheduler?.getState() ?? {
@@ -83,6 +106,7 @@ export class AudioEngine {
       bpm: 120,
       performers: [],
       ensembleComplete: false,
+      pulseEnabled: false,
     };
   }
 
@@ -99,6 +123,8 @@ export class AudioEngine {
   dispose(): void {
     this.scheduler?.reset();
     this.voicePool?.dispose();
+    this.samplePlayer?.dispose();
+    this.pulseGenerator?.dispose();
     if (this.audioContext && this.audioContext.state !== 'closed') {
       this.audioContext.close();
     }
@@ -106,6 +132,8 @@ export class AudioEngine {
     this.voicePool = null;
     this.scheduler = null;
     this.ensemble = null;
+    this.samplePlayer = null;
+    this.pulseGenerator = null;
     this.pendingOnStateChange = null;
     this.initialized = false;
   }

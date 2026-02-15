@@ -12,8 +12,9 @@
  * - Endgame: staggered dropouts when performers reach pattern 53
  */
 
-import type { Pattern, ScoreNote } from '../audio/types.ts';
+import type { Pattern } from '../audio/types.ts';
 import { PATTERNS } from './patterns.ts';
+import { assignInstrument } from '../audio/sampler.ts';
 
 // ---------------------------------------------------------------------------
 // Interfaces
@@ -564,6 +565,7 @@ export class Ensemble {
         patternIndex: s.patternIndex,
         currentPattern: Math.min(s.patternIndex + 1, this._patterns.length),
         status: s.status,
+        instrument: assignInstrument(s.id),
       };
     });
   }
