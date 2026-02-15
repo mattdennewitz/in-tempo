@@ -5,24 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Ensemble behavior must feel alive -- performers making believable musical decisions over a precisely timed audio engine, so each performance is unique and compelling.
-**Current focus:** v1.1 complete -- ready for next milestone
+**Current focus:** v1.2 Polish -- stereo spread, pattern visualization, shareable performances, microtiming
 
 ## Current Position
 
-Phase: All complete (6 phases across v1.0 + v1.1)
-Status: Milestone v1.1 shipped
-Last activity: 2026-02-15 -- Archived v1.1 MIDI milestone
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-15 — Milestone v1.2 started
 
-Progress: [████████████] 100%
-
-## Performance Metrics
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 5. Velocity | 3/3 | ~20min | ~7min |
-| 6. MIDI Export | 2/2 | ~15min | ~7.5min |
+Progress: [░░░░░░░░░░] 0%
 
 ## Accumulated Context
 
@@ -41,5 +33,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: v1.1 milestone archived -- all phases complete
+Stopped at: Starting milestone v1.2 Polish
 Resume file: None

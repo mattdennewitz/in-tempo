@@ -34,7 +34,10 @@ The ensemble behavior must feel alive — performers making believable musical d
 
 ### Active
 
-(None — start next milestone to define new requirements)
+- [ ] Stereo spread — performers panned across the stereo field
+- [ ] Pattern visualization — score overview + per-performer abstract geometry
+- [ ] Shareable performances — seeded PRNG for exact note-by-note reproduction via URL
+- [ ] Microtiming humanization — swing and rubato for more organic feel
 
 ### Out of Scope
 
@@ -42,9 +45,7 @@ The ensemble behavior must feel alive — performers making believable musical d
 - Mobile-optimized layout — desktop-first
 - Recording/export to audio file (WAV/MP3) — MIDI export covers notation needs
 - User conducting/intervention during performance — spectator only by design
-- Stereo spread — deferred from v1.0
 - GT Canon font — deferred, Courier fallback works
-- Abstract geometry visualization — deferred from v1.0
 - Semafor/FT color palette — deferred from v1.0
 
 ## Context
@@ -82,10 +83,20 @@ Tech stack: React 19, Vite, shadcn/ui, Tailwind CSS v4, Web Audio API (AudioWork
 | Passive MidiRecorder pattern | Recorder ref on Scheduler, same pattern as velocityConfigRef — no event system needed | ✓ Good |
 | Ghost note trimming | Filter events by beatIndex < stopBeat — eliminates lookahead artifacts in MIDI | ✓ Good |
 
+## Current Milestone: v1.2 Polish
+
+**Goal:** Elevate the listening and sharing experience with stereo spread, pattern visualization, shareable seeded performances, and microtiming humanization.
+
+**Target features:**
+- Stereo spread — pan performers across the stereo field
+- Pattern visualization — score-wide overview + per-performer abstract geometry
+- Shareable performances — seeded PRNG for exact reproduction via URL
+- Microtiming — swing/rubato humanization complementing velocity
+
 ## Shipped Milestones
 
 - **v1.0 MVP** — Audio engine, ensemble AI, visualization, 3 composition modes (shipped 2026-02-15)
 - **v1.1 MIDI** — Velocity humanization, MIDI export, default 4 performers (shipped 2026-02-15)
 
 ---
-*Last updated: 2026-02-15 after v1.1 milestone complete*
+*Last updated: 2026-02-15 after v1.2 milestone start*
