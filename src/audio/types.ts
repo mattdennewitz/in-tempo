@@ -30,6 +30,8 @@ export interface PerformerState {
   instrument: InstrumentType;
 }
 
+export type { VelocityConfig } from '../score/velocity.ts';
+
 export interface EnsembleEngineState {
   playing: boolean;
   bpm: number;
@@ -39,4 +41,6 @@ export interface EnsembleEngineState {
   scoreMode: ScoreMode;
   pulseEnabled: boolean;
   performerCount: number;
+  humanizationEnabled: boolean;
+  humanizationIntensity: 'subtle' | 'moderate' | 'expressive';
 }

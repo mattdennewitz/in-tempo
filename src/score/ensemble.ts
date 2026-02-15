@@ -15,6 +15,12 @@
 import type { Pattern, ScoreMode } from '../audio/types.ts';
 import { PATTERNS } from './patterns.ts';
 import { assignInstrument } from '../audio/sampler.ts';
+import {
+  computeVelocity,
+  generateVelocityPersonality,
+  type VelocityConfig,
+  type VelocityContext,
+} from './velocity.ts';
 
 // ---------------------------------------------------------------------------
 // Interfaces
@@ -24,6 +30,7 @@ export interface AgentNoteEvent {
   performerId: number;
   midi: number;
   duration: number;
+  velocity: number;
 }
 
 export interface EnsembleSnapshot {
@@ -46,6 +53,8 @@ export interface AgentPersonality {
   minSilentBeats: number;  // 4-16
   maxSilentBeats: number;  // 16-64
   dropoutCooldown: number; // 16-48
+  baseLoudness: number;    // 0.7-1.0
+  jitterAmount: number;    // 0.02-0.12
 }
 
 export interface AgentState {
@@ -192,6 +201,7 @@ function randomInRange(min: number, max: number): number {
 }
 
 export function generatePersonality(): AgentPersonality {
+  const velocityTraits = generateVelocityPersonality();
   return {
     advanceBias: randomInRange(0.8, 1.2),
     repeatBias: randomInRange(0.8, 1.2),
@@ -199,6 +209,8 @@ export function generatePersonality(): AgentPersonality {
     minSilentBeats: Math.floor(randomInRange(4, 16)),
     maxSilentBeats: Math.floor(randomInRange(16, 64)),
     dropoutCooldown: Math.floor(randomInRange(16, 48)),
+    baseLoudness: velocityTraits.baseLoudness,
+    jitterAmount: velocityTraits.jitterAmount,
   };
 }
 
@@ -211,17 +223,20 @@ export class PerformerAgent {
   private patterns: Pattern[];
   private finalPatternIndex: number;
   private bandWidth: number;
+  private velocityConfig: VelocityConfig;
 
   constructor(
     id: number,
     patterns: Pattern[],
     personality?: AgentPersonality,
     finalPatternIndex?: number,
-    bandWidth?: number
+    bandWidth?: number,
+    velocityConfig?: VelocityConfig,
   ) {
     this.patterns = patterns;
     this.finalPatternIndex = finalPatternIndex ?? patterns.length - 1;
     this.bandWidth = bandWidth ?? 3;
+    this.velocityConfig = velocityConfig ?? { enabled: true, intensity: 'moderate' };
     const reps = this.randomReps();
     this._state = {
       id,
@@ -312,10 +327,23 @@ export class PerformerAgent {
       return null;
     }
 
+    const velocityCtx: VelocityContext = {
+      noteIndexInPattern: s.noteIndex - 1, // already incremented above
+      totalNotesInPattern: pattern.notes.length,
+      currentRep: s.totalRepetitions - s.repetitionsRemaining + 1,
+      totalReps: s.totalRepetitions,
+      personality: {
+        baseLoudness: s.personality.baseLoudness,
+        jitterAmount: s.personality.jitterAmount,
+      },
+      config: this.velocityConfig,
+    };
+
     return {
       performerId: s.id,
       midi: note.midi,
       duration: note.duration,
+      velocity: computeVelocity(velocityCtx),
     };
   }
 
@@ -465,6 +493,10 @@ export class PerformerAgent {
     return true;
   }
 
+  setVelocityConfig(config: VelocityConfig): void {
+    this.velocityConfig = config;
+  }
+
   get state(): AgentState {
     return { ...this._state, personality: { ...this._state.personality } };
   }
@@ -502,19 +534,26 @@ export class Ensemble {
   private _scoreMode: ScoreMode;
   private nextId: number;
   private pendingRemovals: Set<number> = new Set();
+  private velocityConfig: VelocityConfig;
 
-  constructor(count: number, patterns: Pattern[] = PATTERNS, mode: ScoreMode = 'riley') {
+  constructor(
+    count: number,
+    patterns: Pattern[] = PATTERNS,
+    mode: ScoreMode = 'riley',
+    velocityConfig: VelocityConfig = { enabled: true, intensity: 'moderate' },
+  ) {
     this._scoreMode = mode;
     this._patterns = patterns;
     this.finalPatternIndex = patterns.length - 1;
     this.bandWidth = Math.max(2, Math.min(5, Math.round(patterns.length * 0.06)));
     this.agents = [];
     this.nextId = count;
+    this.velocityConfig = velocityConfig;
 
     let cumulativeDelay = 0;
     for (let i = 0; i < count; i++) {
       const agent = new PerformerAgent(
-        i, patterns, undefined, this.finalPatternIndex, this.bandWidth
+        i, patterns, undefined, this.finalPatternIndex, this.bandWidth, this.velocityConfig
       );
       agent._mutableState.entryDelay = cumulativeDelay;
       cumulativeDelay += Math.floor(Math.random() * 3) + 2; // 2-4 beats
@@ -586,7 +625,7 @@ export class Ensemble {
   /** Add a new agent that blends into the current musical position. Returns the new agent's id. */
   addAgent(): number {
     const id = this.nextId++;
-    const agent = new PerformerAgent(id, this._patterns, undefined, this.finalPatternIndex, this.bandWidth);
+    const agent = new PerformerAgent(id, this._patterns, undefined, this.finalPatternIndex, this.bandWidth, this.velocityConfig);
 
     // Start at current ensemble minimum pattern so the new performer blends in
     const snapshot = this.createSnapshot();
@@ -596,6 +635,14 @@ export class Ensemble {
 
     this.agents.push(agent);
     return id;
+  }
+
+  /** Update velocity config on ensemble and all agents. */
+  setVelocityConfig(config: VelocityConfig): void {
+    this.velocityConfig = config;
+    for (const agent of this.agents) {
+      agent.setVelocityConfig(config);
+    }
   }
 
   /** Queue an agent for removal on the next tick. Returns false if agent not found. */
