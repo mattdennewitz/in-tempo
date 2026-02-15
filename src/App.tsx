@@ -22,6 +22,7 @@ const INITIAL_STATE: EnsembleEngineState = {
   humanizationEnabled: true,
   humanizationIntensity: 'moderate',
   hasRecording: false,
+  seed: 0,
 };
 
 function App() {

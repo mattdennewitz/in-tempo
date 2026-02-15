@@ -120,6 +120,7 @@ export class Scheduler {
       humanizationEnabled: vc.enabled,
       humanizationIntensity: vc.intensity,
       hasRecording: (this.midiRecorder?.eventCount ?? 0) > 0,
+      seed: 0, // Engine overlays actual seed value
     };
   }
 

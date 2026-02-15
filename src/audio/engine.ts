@@ -16,6 +16,7 @@ import { exportToMidi, downloadMidi } from './midi-exporter.ts';
 import { Ensemble } from '../score/ensemble.ts';
 import { PATTERNS } from '../score/patterns.ts';
 import { getPatternsForMode } from '../score/score-modes.ts';
+import { SeededRng } from '../score/rng.ts';
 
 export class AudioEngine {
   private audioContext: AudioContext | null = null;
@@ -31,6 +32,17 @@ export class AudioEngine {
   private currentPatterns: Pattern[] = PATTERNS;
   private velocityConfig: VelocityConfig = { enabled: true, intensity: 'moderate' };
   private midiRecorder: MidiRecorder = new MidiRecorder();
+  private currentSeed: number = 0;
+
+  /** Set seed for next performance start. 0 means auto-generate. */
+  setSeed(seed: number): void {
+    this.currentSeed = seed;
+  }
+
+  /** Get current seed value. */
+  get seed(): number {
+    return this.currentSeed;
+  }
 
   /**
    * Initialize the audio subsystem: create AudioContext, load worklet module,
@@ -42,7 +54,14 @@ export class AudioEngine {
     this.audioContext = new AudioContext();
     await this.audioContext.audioWorklet.addModule('/synth-processor.js');
 
-    this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode, this.velocityConfig);
+    // Generate seed if not set, create RNG for deterministic performance
+    if (this.currentSeed === 0) {
+      this.currentSeed = Date.now() & 0xFFFFFFFF;
+    }
+    const rng = new SeededRng(this.currentSeed);
+    this.currentPatterns = getPatternsForMode(this.currentMode, rng);
+
+    this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode, this.velocityConfig, rng);
     this.voicePool = new VoicePool(this.audioContext, this.initialPerformerCount * 2);
 
     // Initialize sampled instruments (loads from CDN)
@@ -97,6 +116,7 @@ export class AudioEngine {
   reset(): void {
     this.scheduler?.reset();
     this.midiRecorder.clear();
+    this.currentSeed = 0;
   }
 
   /** Set BPM (clamped to 100-180). Takes effect on next beat. */
@@ -139,7 +159,14 @@ export class AudioEngine {
       this.scheduler?.reset();
       this.voicePool?.stopAll();
       this.voicePool?.resize(this.initialPerformerCount * 2);
-      this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode, this.velocityConfig);
+
+      // Create seeded RNG for deterministic rebuild
+      if (this.currentSeed === 0) {
+        this.currentSeed = Date.now() & 0xFFFFFFFF;
+      }
+      const rng = new SeededRng(this.currentSeed);
+      this.currentPatterns = getPatternsForMode(this.currentMode, rng);
+      this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode, this.velocityConfig, rng);
       this.scheduler = new Scheduler(
         this.audioContext!,
         this.voicePool!,
@@ -200,7 +227,7 @@ export class AudioEngine {
 
   /** Get current ensemble engine state. */
   getState(): EnsembleEngineState {
-    return this.scheduler?.getState() ?? {
+    const base = this.scheduler?.getState() ?? {
       playing: false,
       bpm: 120,
       performers: [],
@@ -212,7 +239,11 @@ export class AudioEngine {
       humanizationEnabled: this.velocityConfig.enabled,
       humanizationIntensity: this.velocityConfig.intensity,
       hasRecording: false,
+      seed: 0,
     };
+    // Engine owns the seed -- overlay it on scheduler state
+    base.seed = this.currentSeed;
+    return base;
   }
 
   /**
@@ -221,7 +252,13 @@ export class AudioEngine {
    */
   setScoreMode(mode: ScoreMode): void {
     this.currentMode = mode;
-    this.currentPatterns = getPatternsForMode(mode);
+
+    // Create seeded RNG for deterministic pattern generation
+    if (this.currentSeed === 0) {
+      this.currentSeed = Date.now() & 0xFFFFFFFF;
+    }
+    const rng = new SeededRng(this.currentSeed);
+    this.currentPatterns = getPatternsForMode(mode, rng);
 
     if (this.initialized) {
       // Preserve callback before tearing down old scheduler
@@ -232,7 +269,7 @@ export class AudioEngine {
       this.voicePool?.stopAll();
 
       // Rebuild ensemble and scheduler with new patterns
-      this.ensemble = new Ensemble(this.performerCount, this.currentPatterns, mode, this.velocityConfig);
+      this.ensemble = new Ensemble(this.performerCount, this.currentPatterns, mode, this.velocityConfig, rng);
       this.scheduler = new Scheduler(
         this.audioContext!,
         this.voicePool!,
