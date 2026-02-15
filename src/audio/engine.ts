@@ -117,7 +117,13 @@ export class AudioEngine {
 
   /** Get current performer count. */
   get performerCount(): number {
-    return this.ensemble?.agentCount ?? 8;
+    return this.ensemble?.agentCount ?? this.initialPerformerCount;
+  }
+
+  /** Set initial performer count (before playback starts). No-op if already initialized. */
+  setPerformerCount(count: number): void {
+    if (this.initialized) return;
+    this.initialPerformerCount = Math.max(2, Math.min(16, count));
   }
 
   /** Toggle the eighth-note high C pulse. Returns new enabled state. */

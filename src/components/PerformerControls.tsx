@@ -9,6 +9,7 @@ interface PerformerControlsProps {
   onRemove: (id: number) => void;
   performers: PerformerState[];
   disabled: boolean;
+  count?: number;
 }
 
 export function PerformerControls({
@@ -16,18 +17,25 @@ export function PerformerControls({
   onRemove,
   performers,
   disabled,
+  count,
 }: PerformerControlsProps) {
-  const activePerformers = performers.filter(p => p.status !== 'complete');
-  const canAdd = !disabled && activePerformers.length < MAX_PERFORMERS;
-  const canRemove = !disabled && activePerformers.length > MIN_PERFORMERS;
+  const activeCount = count ?? performers.filter(p => p.status !== 'complete').length;
+  const canAdd = !disabled && activeCount < MAX_PERFORMERS;
+  const canRemove = !disabled && activeCount > MIN_PERFORMERS;
 
   const handleRemove = () => {
-    const target = activePerformers.reduce<PerformerState | null>(
-      (best, p) => (!best || p.id > best.id ? p : best),
-      null,
-    );
-    if (target) {
-      onRemove(target.id);
+    if (count !== undefined) {
+      // Pre-playback mode: just decrement, id doesn't matter
+      onRemove(0);
+    } else {
+      const activePerformers = performers.filter(p => p.status !== 'complete');
+      const target = activePerformers.reduce<PerformerState | null>(
+        (best, p) => (!best || p.id > best.id ? p : best),
+        null,
+      );
+      if (target) {
+        onRemove(target.id);
+      }
     }
   };
 
@@ -42,7 +50,7 @@ export function PerformerControls({
         -
       </Button>
       <span className="text-sm text-muted-foreground min-w-[1.5rem] text-center tabular-nums">
-        {activePerformers.length}
+        {activeCount}
       </span>
       <Button
         variant="outline"

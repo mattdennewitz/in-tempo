@@ -16,6 +16,7 @@ function App() {
   const [performers, setPerformers] = useState<PerformerState[]>([]);
   const [ensembleComplete, setEnsembleComplete] = useState(false);
   const [bpm, setBpm] = useState(120);
+  const [performerCount, setPerformerCount] = useState(8);
 
   useEffect(() => {
     const engine = engineRef.current;
@@ -47,12 +48,28 @@ function App() {
   }, []);
 
   const handleAddPerformer = useCallback(() => {
-    engineRef.current.addPerformer();
-  }, []);
+    if (playing) {
+      engineRef.current.addPerformer();
+    } else {
+      setPerformerCount(prev => {
+        const next = Math.min(16, prev + 1);
+        engineRef.current.setPerformerCount(next);
+        return next;
+      });
+    }
+  }, [playing]);
 
   const handleRemovePerformer = useCallback((id: number) => {
-    engineRef.current.removePerformer(id);
-  }, []);
+    if (playing) {
+      engineRef.current.removePerformer(id);
+    } else {
+      setPerformerCount(prev => {
+        const next = Math.max(2, prev - 1);
+        engineRef.current.setPerformerCount(next);
+        return next;
+      });
+    }
+  }, [playing]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen gap-8 p-8">
@@ -72,7 +89,8 @@ function App() {
         onAdd={handleAddPerformer}
         onRemove={handleRemovePerformer}
         performers={performers}
-        disabled={!playing}
+        disabled={false}
+        count={playing ? undefined : performerCount}
       />
       <BpmSlider
         bpm={bpm}
