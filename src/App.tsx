@@ -7,6 +7,7 @@ import { BpmSlider } from './components/BpmSlider.tsx';
 import { PatternDisplay } from './components/PatternDisplay.tsx';
 import { PerformerControls } from './components/PerformerControls.tsx';
 import { HumanizationToggle } from './components/HumanizationToggle.tsx';
+import { ExportButton } from './components/ExportButton.tsx';
 import './App.css';
 
 const INITIAL_STATE: EnsembleEngineState = {
@@ -20,6 +21,7 @@ const INITIAL_STATE: EnsembleEngineState = {
   performerCount: 4,
   humanizationEnabled: true,
   humanizationIntensity: 'moderate',
+  hasRecording: false,
 };
 
 function App() {
@@ -64,6 +66,10 @@ function App() {
     engineRef.current.setHumanizationIntensity(intensity);
   }, []);
 
+  const handleExport = useCallback(() => {
+    engineRef.current.exportMidi();
+  }, []);
+
   const handleAddPerformer = useCallback(() => {
     if (engineState.playing) {
       engineRef.current.addPerformer();
@@ -101,6 +107,10 @@ function App() {
         onStart={handleStart}
         onStop={handleStop}
         onReset={handleReset}
+      />
+      <ExportButton
+        onExport={handleExport}
+        disabled={!engineState.hasRecording}
       />
       <PerformerControls
         onAdd={handleAddPerformer}

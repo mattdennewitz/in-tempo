@@ -49,7 +49,7 @@ export function exportToMidi(events: RecordedEvent[], bpm: number): Uint8Array {
 
   // Sort performer IDs for deterministic output
   const performerIds = [...byPerformer.keys()].sort((a, b) => a - b);
-  const tracks: MidiWriter.Track[] = [];
+  const tracks: InstanceType<typeof MidiWriter.Track>[] = [];
 
   for (let i = 0; i < performerIds.length; i++) {
     const pid = performerIds[i];
@@ -99,7 +99,7 @@ export function exportToMidi(events: RecordedEvent[], bpm: number): Uint8Array {
  * Trigger a browser download of the MIDI data as a .mid file.
  */
 export function downloadMidi(data: Uint8Array, filename: string): void {
-  const blob = new Blob([data], { type: 'audio/midi' });
+  const blob = new Blob([data.buffer as ArrayBuffer], { type: 'audio/midi' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

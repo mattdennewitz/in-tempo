@@ -22,13 +22,6 @@ for (let midi = 48; midi <= 84; midi++) {
 }
 
 /**
- * Pick a random element from an array.
- */
-function pick<T>(arr: readonly T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-/**
  * Convert a binary Euclidean rhythm to ScoreNote[], assigning pitches.
  *
  * @param rhythm Binary array (1 = pulse, 0 = rest)
