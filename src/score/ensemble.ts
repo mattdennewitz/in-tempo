@@ -484,10 +484,13 @@ export class PerformerAgent {
 export class Ensemble {
   private agents: PerformerAgent[];
   private _patterns: Pattern[];
+  private nextId: number;
+  private pendingRemovals: Set<number> = new Set();
 
   constructor(count: number, patterns: Pattern[] = PATTERNS) {
     this._patterns = patterns;
     this.agents = [];
+    this.nextId = count;
 
     let cumulativeDelay = 0;
     for (let i = 0; i < count; i++) {
@@ -499,6 +502,12 @@ export class Ensemble {
   }
 
   tick(): AgentNoteEvent[] {
+    // Process queued removals before snapshot (safe -- no iteration in progress)
+    if (this.pendingRemovals.size > 0) {
+      this.agents = this.agents.filter(a => !this.pendingRemovals.has(a.state.id));
+      this.pendingRemovals.clear();
+    }
+
     // Create frozen snapshot BEFORE any agent ticks
     const snapshot = this.createSnapshot();
 
@@ -553,6 +562,37 @@ export class Ensemble {
     return Object.freeze(snapshot);
   }
 
+  /** Add a new agent that blends into the current musical position. Returns the new agent's id. */
+  addAgent(): number {
+    const id = this.nextId++;
+    const agent = new PerformerAgent(id, this._patterns);
+
+    // Start at current ensemble minimum pattern so the new performer blends in
+    const snapshot = this.createSnapshot();
+    agent._mutableState.patternIndex = snapshot.minPatternIndex;
+    agent._mutableState.noteIndex = 0;
+    agent._mutableState.entryDelay = Math.floor(Math.random() * 3) + 2; // 2-4 beats stagger
+
+    this.agents.push(agent);
+    return id;
+  }
+
+  /** Queue an agent for removal on the next tick. Returns false if agent not found. */
+  removeAgent(id: number): boolean {
+    const agent = this.agents.find(a => a.state.id === id);
+    if (!agent) return false;
+
+    // Mark as complete so its voice releases naturally on next tick
+    agent._mutableState.status = 'complete';
+    // Queue actual removal for next tick() (safe -- no mid-iteration mutation)
+    this.pendingRemovals.add(id);
+    return true;
+  }
+
+  get agentCount(): number {
+    return this.agents.length;
+  }
+
   get isComplete(): boolean {
     return this.agents.every(a => a.isComplete);
   }
@@ -576,6 +616,8 @@ export class Ensemble {
   }
 
   reset(): void {
+    this.pendingRemovals.clear();
+    this.nextId = this.agents.length;
     let cumulativeDelay = 0;
     for (const agent of this.agents) {
       agent.reset();
