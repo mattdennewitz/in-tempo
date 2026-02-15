@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-14)
 ## Current Position
 
 Phase: 3 of 4 (Visualization, Instruments, Polish)
-Plan: 1 of 3 in current phase -- COMPLETE
+Plan: 2 of 3 in current phase -- COMPLETE
 Status: Executing
-Last activity: 2026-02-15 -- Completed 03-01-PLAN.md
+Last activity: 2026-02-15 -- Completed 03-02-PLAN.md
 
-Progress: [################--] 86%
+Progress: [#################-] 92%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
+- Total plans completed: 7
 - Average duration: 4min
-- Total execution time: 0.40 hours
+- Total execution time: 0.45 hours
 
 **By Phase:**
 
@@ -29,10 +29,10 @@ Progress: [################--] 86%
 |-------|-------|-------|----------|
 | 01-audio-engine-score-foundation | 3/3 | 16min | 5min |
 | 02-ensemble-ai | 2/2 | 5min | 2.5min |
-| 03-visualization-instruments-polish | 1/3 | 2min | 2min |
+| 03-visualization-instruments-polish | 2/3 | 5min | 2.5min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (2min), 01-03 (10min), 02-01 (3min), 02-02 (2min), 03-01 (2min)
+- Last 5 plans: 01-03 (10min), 02-01 (3min), 02-02 (2min), 03-01 (2min), 03-02 (3min)
 - Trend: Fast
 
 *Updated after each plan completion*
@@ -67,6 +67,9 @@ Recent decisions affecting current work:
 - [03-01]: Canvas rAF loop reads from ref (not React state) to avoid render-loop coupling
 - [03-01]: STATE_COLORS separated from base PALETTE for clean renderer code
 - [03-01]: ScoreModeSelector uses native select element with disabled options for simplicity
+- [03-02]: Deterministic instrument assignment via performerId % 3 for stable, varied timbres
+- [03-02]: SamplePlayer routes through shared GainNode at 0.6 to balance with synth voices
+- [03-02]: Pulse uses fresh OscillatorNode per beat with auto-disconnect for zero memory growth
 
 ### Pending Todos
 
@@ -75,12 +78,12 @@ None yet.
 ### Blockers/Concerns
 
 - GT Canon font files need to be provided by user before Phase 3 visual identity work
-- Sampled instrument audio files (piano, marimba) need to be sourced before Phase 3 instrument work
+- ~~Sampled instrument audio files~~ RESOLVED: smplr loads piano/marimba from CDN at runtime
 
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 03-01-PLAN.md (Canvas performer visualization, editorial palette, GT Canon typography, score mode selector)
+Stopped at: Completed 03-02-PLAN.md (Sampled instruments via smplr, pulse generator, instrument routing in scheduler)
 Resume file: None
 
-**Phase 3 in progress** - Canvas visualization and visual identity applied. Next: 03-02 (instruments/sampler).
+**Phase 3 in progress** - Canvas visualization, visual identity, and sampled instruments complete. Next: 03-03 (final polish).
