@@ -1,421 +1,584 @@
-# Architecture Patterns
+# Architecture Patterns: MIDI Export & Velocity Humanization
 
-**Domain:** Browser-based generative music performance engine
-**Researched:** 2026-02-14
-**Confidence:** MEDIUM (based on training data; WebSearch/WebFetch unavailable for verification)
+**Domain:** Integration of MIDI recording/export and velocity humanization into existing generative performance engine
+**Researched:** 2026-02-15
+**Confidence:** HIGH (based on direct codebase analysis + verified library APIs)
 
-## Recommended Architecture
-
-Three-layer separation: **Score/Data**, **Engine/Simulation**, **Audio/Rendering**, with React UI as a thin presentation layer that observes engine state. The critical boundary is between the main thread (UI + simulation) and the audio thread (Web Audio API scheduling).
+## Existing Architecture Summary
 
 ```
-+------------------------------------------------------------------+
-|  React UI Layer (presentation only)                              |
-|  - PerformanceControls (start/stop/reset/BPM)                   |
-|  - PerformerGrid (status boxes, geometry viz)                    |
-|  - ScoreConfig (mode selector, performer count)                  |
-+------------------------------------------------------------------+
-        |  reads via subscription (React state/store)
-        v
-+------------------------------------------------------------------+
-|  Engine Layer (main thread)                                      |
-|  +------------------+  +---------------------+                   |
-|  | ScoreManager     |  | PerformanceEngine   |                   |
-|  | - pattern data   |  | - transport state   |                   |
-|  | - score modes    |  | - tick loop         |                   |
-|  | - Euclidean gen  |  | - performer updates |                   |
-|  +------------------+  +---------------------+                   |
-|          |                       |                                |
-|          v                       v                                |
-|  +----------------------------------------------------+         |
-|  | PerformerAgent[] (one per simulated performer)      |         |
-|  | - current pattern index                             |         |
-|  | - repetition count / decision state                 |         |
-|  | - AI behavior weights (density, proximity, etc.)    |         |
-|  | - playing/silent status                             |         |
-|  +----------------------------------------------------+         |
-+------------------------------------------------------------------+
-        |  schedules notes via Web Audio API
-        v
-+------------------------------------------------------------------+
-|  Audio Layer                                                     |
-|  +---------------------+  +---------------------------+         |
-|  | AudioScheduler      |  | VoiceManager              |         |
-|  | - lookahead loop    |  | - synth voice pool        |         |
-|  | - scheduleAheadTime |  | - sample voice pool       |         |
-|  | - note queue        |  | - voice assignment        |         |
-|  +---------------------+  +---------------------------+         |
-|          |                           |                           |
-|          v                           v                           |
-|  +----------------------------------------------------+         |
-|  | AudioContext                                        |         |
-|  | - GainNode per performer (volume + panning)         |         |
-|  | - StereoPannerNode per performer                    |         |
-|  | - OscillatorNode / AudioBufferSourceNode per note   |         |
-|  | - Master GainNode -> destination                    |         |
-|  +----------------------------------------------------+         |
-+------------------------------------------------------------------+
+AudioEngine (facade)
+  |-- AudioContext
+  |-- Ensemble (score/ensemble.ts)
+  |   |-- PerformerAgent[] (weighted decision logic)
+  |   `-- tick() -> AgentNoteEvent[] { performerId, midi, duration }
+  |-- Scheduler (audio/scheduler.ts)
+  |   |-- lookahead tick loop (25ms timer, 100ms window)
+  |   |-- scheduleBeat() polls Ensemble, routes to VoicePool or SamplePlayer
+  |   `-- advanceTime() increments by one eighth note
+  |-- VoicePool (audio/voice-pool.ts)
+  |   |-- AudioWorkletNode[] (synth-processor.js)
+  |   `-- claim/release with voice stealing
+  |-- SamplePlayer (audio/sampler.ts)
+  |   |-- SplendidGrandPiano (smplr)
+  |   `-- Soundfont marimba (smplr)
+  `-- PulseGenerator (audio/pulse.ts)
 ```
+
+**Key data flow today:** Scheduler.scheduleBeat() calls ensemble.tick() which returns AgentNoteEvent[]. Each event has `{ performerId, midi, duration }`. The scheduler routes events to either VoicePool (synth) or SamplePlayer (piano/marimba) based on `assignInstrument(performerId)`. Neither event type currently carries velocity.
+
+## Recommended Architecture for New Features
 
 ### Component Boundaries
 
-| Component | Responsibility | Communicates With | Thread |
-|-----------|---------------|-------------------|--------|
-| **ScoreManager** | Holds pattern data for all score modes. Generates Euclidean/algorithmic scores on demand. Pure data, no timing. | PerformerAgent (reads patterns), ScoreConfig UI (mode selection) | Main |
-| **PerformanceEngine** | Transport control (play/pause/stop/reset). Runs the lookahead tick loop via `setInterval`. Advances simulation time. Orchestrates performer decisions each tick. | PerformerAgent[] (triggers decisions), AudioScheduler (sends note events), UI (exposes state) | Main |
-| **PerformerAgent** | Single performer's AI brain. Decides: advance to next pattern? repeat? drop out? rejoin? Holds all per-performer state. Pure logic, no audio. | ScoreManager (reads current pattern), PerformanceEngine (receives tick), EnsembleState (reads peer positions) | Main |
-| **EnsembleState** | Shared read-only snapshot of all performers' positions/statuses. Performers read this to make density-aware, proximity-aware decisions. Updated by PerformanceEngine each tick. | PerformerAgent[] (reads), PerformanceEngine (writes) | Main |
-| **AudioScheduler** | The Chris Wilson lookahead scheduler. Runs a `setInterval` (~25ms) that looks ahead (~100ms) and schedules any notes that fall in that window using `AudioContext.currentTime`. Converts note events into Web Audio API calls. | PerformanceEngine (receives note events), VoiceManager (requests voices), AudioContext (schedules) | Main (scheduling), Audio (playback) |
-| **VoiceManager** | Manages instrument assignment and voice creation. Each performer gets assigned a voice type (synth or sampled instrument) at performance start. Creates appropriate AudioNodes per note. | AudioScheduler (creates nodes on demand), AudioContext (node creation) | Main |
-| **StereoMixer** | Per-performer signal chain: source -> gain -> panner -> master. Manages the static routing graph. Panning positions calculated from performer index/count. | VoiceManager (output routing), AudioContext (node graph) | Main (setup), Audio (processing) |
-| **React UI** | Presentation only. Subscribes to engine state, renders performer boxes, controls, visualizations. Never touches audio directly. | PerformanceEngine (reads state), ScoreManager (config), user input (dispatches commands) | Main |
+| Component | Status | Responsibility | Communicates With |
+|-----------|--------|---------------|-------------------|
+| `VelocityHumanizer` | **NEW** `src/audio/velocity.ts` | Generate per-note velocity values with musical humanization curves | Called by Scheduler during scheduleBeat |
+| `MidiRecorder` | **NEW** `src/audio/midi-recorder.ts` | Accumulate timestamped MIDI events during performance | Fed by Scheduler, read by MidiExporter |
+| `MidiExporter` | **NEW** `src/audio/midi-exporter.ts` | Convert recorded events to Standard MIDI File via midi-writer-js | Reads from MidiRecorder, triggered by AudioEngine |
+| `AgentNoteEvent` | **MODIFY** `src/score/ensemble.ts` | Add `velocity` field to event interface | Produced by Ensemble, consumed by Scheduler |
+| `Scheduler` | **MODIFY** `src/audio/scheduler.ts` | Apply velocity to audio routing, feed events to MidiRecorder | Reads velocity from events, writes to MidiRecorder |
+| `SamplePlayer` | **MODIFY** `src/audio/sampler.ts` | Accept and pass velocity to smplr `.start()` | Receives velocity from Scheduler |
+| `synth-processor.js` | **MODIFY** `public/synth-processor.js` | Accept velocity in noteOn message, scale maxGain | Receives velocity via port.postMessage |
+| `AudioEngine` | **MODIFY** `src/audio/engine.ts` | Expose recording controls and export trigger | Owns MidiRecorder, delegates to MidiExporter |
 
-### Data Flow
+### Architecture Diagram
 
-**Setup flow (before performance starts):**
 ```
-User selects score mode -> ScoreManager generates/loads patterns
-User sets BPM -> PerformanceEngine stores tempo
-User sets performer count -> PerformanceEngine creates PerformerAgent[]
-User clicks Start -> PerformanceEngine.start()
-```
-
-**Performance flow (each tick cycle):**
-```
-1. setInterval fires (~25ms)
-2. PerformanceEngine updates EnsembleState snapshot
-3. For each PerformerAgent:
-   a. Agent reads EnsembleState (peer positions, density)
-   b. Agent makes decision (advance/repeat/dropout/rejoin)
-   c. If playing: Agent reads current pattern from ScoreManager
-   d. Agent emits note events for notes in the lookahead window
-4. AudioScheduler receives note events
-5. AudioScheduler calls VoiceManager to create source nodes
-6. Source nodes scheduled at exact AudioContext.currentTime offsets
-7. PerformanceEngine publishes state update for UI
-8. React re-renders affected performer boxes
+                  Ensemble.tick()
+                       |
+                       v
+              AgentNoteEvent[] (now includes velocity)
+                       |
+            +----------+----------+
+            |                     |
+            v                     v
+    VelocityHumanizer      MidiRecorder.record()
+    (enrich velocity)       (accumulate events)
+            |                     |
+            v                     |
+    Scheduler.scheduleBeat()      |
+     |          |                 |
+     v          v                 v
+  VoicePool  SamplePlayer   MidiExporter.export()
+  (velocity   (velocity      (on stop/export)
+   in noteOn)  in .start())
 ```
 
-**Note scheduling detail (the critical timing path):**
+## Integration Point 1: Velocity Humanization
+
+### Where Velocity Originates
+
+**Decision: Velocity is generated at the Ensemble/Agent level, not the Scheduler level.**
+
+Rationale: Velocity is a musical decision, not an audio-routing decision. Each PerformerAgent already has a `personality` with biases. Velocity should follow the same pattern -- each agent generates its own velocity influenced by its personality and the current musical context.
+
+### VelocityHumanizer Design
+
+```typescript
+// src/audio/velocity.ts
+
+/** Velocity value 1-127 (MIDI standard) */
+export type Velocity = number;
+
+export interface VelocityProfile {
+  baseVelocity: number;      // 60-100, center point for this performer
+  variance: number;           // 5-20, random spread around base
+  accentStrength: number;     // 0.1-0.3, how much louder accented beats are
+  fadeInBeats: number;        // 4-16, gradual entry (start soft, ramp up)
+}
+
+export function generateVelocityProfile(): VelocityProfile {
+  return {
+    baseVelocity: 70 + Math.floor(Math.random() * 30),  // 70-100
+    variance: 5 + Math.floor(Math.random() * 15),         // 5-20
+    accentStrength: 0.1 + Math.random() * 0.2,            // 0.1-0.3
+    fadeInBeats: 4 + Math.floor(Math.random() * 12),       // 4-16
+  };
+}
+
+/**
+ * Compute velocity for a single note event.
+ *
+ * Factors:
+ * 1. Base velocity from performer profile
+ * 2. Gaussian-ish random variance (humanization)
+ * 3. Metric accent: downbeats (beat 0, 4) get boosted
+ * 4. Fade-in on entry/rejoin
+ * 5. Density scaling: quieter when ensemble is dense
+ */
+export function computeVelocity(
+  profile: VelocityProfile,
+  beatIndex: number,
+  beatsSinceEntry: number,
+  ensembleDensity: number,
+): Velocity {
+  // 1. Base
+  let vel = profile.baseVelocity;
+
+  // 2. Humanization variance (approximated normal distribution via sum of 3 randoms)
+  const noise = ((Math.random() + Math.random() + Math.random()) / 3 - 0.5) * 2;
+  vel += noise * profile.variance;
+
+  // 3. Metric accent (every 4th eighth note = quarter note downbeat)
+  if (beatIndex % 4 === 0) {
+    vel += vel * profile.accentStrength;
+  }
+  // Stronger accent on beat 0 of bar (every 8th eighth note)
+  if (beatIndex % 8 === 0) {
+    vel += vel * profile.accentStrength * 0.5;
+  }
+
+  // 4. Fade-in after entry/rejoin
+  if (beatsSinceEntry < profile.fadeInBeats) {
+    const fadeRatio = beatsSinceEntry / profile.fadeInBeats;
+    vel *= 0.4 + 0.6 * fadeRatio; // start at 40%, ramp to 100%
+  }
+
+  // 5. Density scaling: softer when crowded
+  if (ensembleDensity > 0.7) {
+    vel *= 1.0 - (ensembleDensity - 0.7) * 0.5; // up to 15% reduction at full density
+  }
+
+  return Math.max(1, Math.min(127, Math.round(vel)));
+}
 ```
-                    now              lookahead boundary
-                     |                    |
-  AudioContext time: |====scheduling======|
-                     |  window (~100ms)   |
 
-  setInterval fires every ~25ms
-  Each fire: schedule any unscheduled notes between now and (now + scheduleAheadTime)
-  Notes get exact .start(time) calls -> sample-accurate playback
+### Integration with AgentNoteEvent
+
+**MODIFY** `AgentNoteEvent` in `src/score/ensemble.ts`:
+
+```typescript
+export interface AgentNoteEvent {
+  performerId: number;
+  midi: number;
+  duration: number;
+  velocity: number;  // NEW: 1-127 MIDI velocity
+}
 ```
 
-**State update flow (Engine -> UI):**
+**MODIFY** `PerformerAgent.tick()` to compute and include velocity:
+
+The agent already tracks `beatsSinceLastDropout` which can approximate "beats since entry." The `VelocityProfile` should be added alongside `AgentPersonality` -- generated once at agent creation, stored on agent state.
+
+### Velocity Propagation Through Audio
+
+**VoicePool path (synth):**
+
+Currently in `scheduler.ts` line 177:
+```typescript
+voice.node.port.postMessage({ type: 'noteOn', frequency, time });
 ```
-PerformanceEngine holds observable state:
-  - performers[]: { id, patternIndex, status, repetitionCount, voiceType }
-  - transport: { isPlaying, currentBeat, elapsedTime }
-  - isFinished: boolean
 
-React subscribes via:
-  Option A: Zustand store (recommended - lightweight, no boilerplate)
-  Option B: useSyncExternalStore hook (built-in, zero deps)
+Change to:
+```typescript
+voice.node.port.postMessage({ type: 'noteOn', frequency, time, velocity: event.velocity });
+```
 
-UI reads state, never writes to engine internals.
-User commands flow through: UI -> dispatch action -> PerformanceEngine method call
+In `synth-processor.js`, the `maxGain` field (currently hardcoded 0.3) becomes dynamic:
+```javascript
+// In noteOn handler:
+this.maxGain = 0.3 * (data.velocity / 100); // scale 0.3 by normalized velocity
+```
+
+**SamplePlayer path (piano/marimba):**
+
+Currently in `sampler.ts` line 67:
+```typescript
+target.start({ note: midi, time, duration });
+```
+
+The smplr `SampleStart` type already accepts `velocity?: number` (0-127 range, verified from smplr type definitions). Change to:
+```typescript
+target.start({ note: midi, time, duration, velocity });
+```
+
+**This is the lowest-friction integration point in the entire system.** The smplr library natively supports velocity and will adjust both volume and timbre (piano samples have velocity layers). The synth processor needs a small modification but the change is isolated.
+
+**PulseGenerator:** No velocity change needed. The pulse is a fixed reference signal.
+
+## Integration Point 2: MIDI Event Recording
+
+### Where Recording Should Happen
+
+**Decision: Record in Scheduler.scheduleBeat(), NOT at the Engine level or Ensemble level.**
+
+Rationale:
+- **Not Ensemble level:** Ensemble produces abstract note events without timing information. It does not know about AudioContext time or BPM.
+- **Not Engine level:** Engine is a facade with no visibility into individual beat scheduling.
+- **Scheduler level:** This is where we have (a) the note events from Ensemble, (b) the precise AudioContext timestamp, (c) the current BPM, and (d) velocity. This is the single point where all MIDI-relevant data converges.
+
+### MidiRecorder Design
+
+```typescript
+// src/audio/midi-recorder.ts
+
+export interface RecordedMidiEvent {
+  /** Absolute time in seconds from performance start */
+  time: number;
+  /** MIDI note number */
+  midi: number;
+  /** Duration in seconds */
+  durationSeconds: number;
+  /** MIDI velocity 1-127 */
+  velocity: number;
+  /** Performer ID (maps to MIDI track) */
+  performerId: number;
+  /** Instrument type for track metadata */
+  instrument: InstrumentType;
+}
+
+export class MidiRecorder {
+  private events: RecordedMidiEvent[] = [];
+  private startTime: number = 0;
+  private _recording: boolean = false;
+
+  /** Begin recording. Call with AudioContext.currentTime at performance start. */
+  start(audioContextTime: number): void {
+    this.events = [];
+    this.startTime = audioContextTime;
+    this._recording = true;
+  }
+
+  /** Record a single note event. */
+  record(
+    time: number,
+    midi: number,
+    durationSeconds: number,
+    velocity: number,
+    performerId: number,
+    instrument: InstrumentType,
+  ): void {
+    if (!this._recording) return;
+    this.events.push({
+      time: time - this.startTime,  // normalize to 0-based
+      midi,
+      durationSeconds,
+      velocity,
+      performerId,
+      instrument,
+    });
+  }
+
+  /** Stop recording and return accumulated events. */
+  stop(): RecordedMidiEvent[] {
+    this._recording = false;
+    return [...this.events];
+  }
+
+  /** Clear all recorded events. */
+  clear(): void {
+    this.events = [];
+    this._recording = false;
+  }
+
+  get isRecording(): boolean {
+    return this._recording;
+  }
+
+  get eventCount(): number {
+    return this.events.length;
+  }
+}
+```
+
+### Recording Hook in Scheduler
+
+In `Scheduler.scheduleBeat()`, after the existing event routing loop, add recording:
+
+```typescript
+// Inside the for (const event of events) loop, after routing to voice/sample:
+if (this.midiRecorder?.isRecording) {
+  const instrument = assignInstrument(event.performerId);
+  this.midiRecorder.record(
+    time,
+    event.midi,
+    noteDurationSeconds,
+    event.velocity,
+    event.performerId,
+    instrument,
+  );
+}
+```
+
+The Scheduler constructor gains a `midiRecorder` parameter (optional, injected by AudioEngine).
+
+### MidiExporter Design
+
+```typescript
+// src/audio/midi-exporter.ts
+import MidiWriter from 'midi-writer-js';
+
+export function exportToMidi(
+  events: RecordedMidiEvent[],
+  bpm: number,
+  scoreMode: ScoreMode,
+): Uint8Array {
+  // Group events by performerId -> one MIDI track per performer
+  const byPerformer = new Map<number, RecordedMidiEvent[]>();
+  for (const evt of events) {
+    const list = byPerformer.get(evt.performerId) ?? [];
+    list.push(evt);
+    byPerformer.set(evt.performerId, list);
+  }
+
+  const tracks: MidiWriter.Track[] = [];
+
+  for (const [performerId, performerEvents] of byPerformer) {
+    const track = new MidiWriter.Track();
+    track.setTempo(bpm);
+    track.addTrackName(`Performer ${performerId + 1} (${performerEvents[0]?.instrument ?? 'synth'})`);
+
+    // Sort by time
+    performerEvents.sort((a, b) => a.time - b.time);
+
+    // Convert seconds to ticks (midi-writer-js uses 'T' prefix for tick values)
+    // PPQ is 128 by default in midi-writer-js
+    const PPQ = 128;
+    const ticksPerSecond = (bpm / 60) * PPQ;
+
+    let lastTick = 0;
+    for (const evt of performerEvents) {
+      const startTick = Math.round(evt.time * ticksPerSecond);
+      const durationTicks = Math.max(1, Math.round(evt.durationSeconds * ticksPerSecond));
+      const waitTicks = startTick - lastTick;
+
+      track.addEvent(new MidiWriter.NoteEvent({
+        pitch: evt.midi,
+        duration: `T${durationTicks}`,
+        velocity: Math.round(evt.velocity * (100 / 127)), // midi-writer-js uses 1-100 scale
+        wait: `T${Math.max(0, waitTicks)}`,
+      }));
+
+      lastTick = startTick + durationTicks;
+    }
+
+    tracks.push(track);
+  }
+
+  const writer = new MidiWriter.Writer(tracks);
+  return writer.buildFile();
+}
+
+/** Trigger browser download of MIDI file. */
+export function downloadMidi(data: Uint8Array, filename: string): void {
+  const blob = new Blob([data], { type: 'audio/midi' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+```
+
+## Integration Point 3: AudioEngine Facade Changes
+
+```typescript
+// Additions to AudioEngine class
+
+private midiRecorder: MidiRecorder | null = null;
+
+// In initialize():
+this.midiRecorder = new MidiRecorder();
+// Pass to Scheduler constructor (add parameter)
+
+// In start():
+this.midiRecorder?.start(this.audioContext!.currentTime);
+
+// In stop():
+// Recording continues until explicit export or reset
+
+// In reset():
+this.midiRecorder?.clear();
+
+// NEW public methods:
+exportMidi(): void {
+  const events = this.midiRecorder?.stop() ?? [];
+  if (events.length === 0) return;
+  const data = exportToMidi(events, this._bpm, this.currentMode);
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+  downloadMidi(data, `intempo-${this.currentMode}-${timestamp}.mid`);
+}
+
+get hasRecordedEvents(): boolean {
+  return (this.midiRecorder?.eventCount ?? 0) > 0;
+}
+```
+
+## Data Flow Summary
+
+### Velocity Flow (per note)
+
+```
+PerformerAgent.tick()
+  -> computeVelocity(profile, beatIndex, beatsSinceEntry, density)
+  -> AgentNoteEvent { midi, duration, velocity }
+  -> Scheduler.scheduleBeat()
+     |
+     +-- synth path: voice.node.port.postMessage({ ..., velocity })
+     |     -> synth-processor.js: maxGain = 0.3 * (velocity / 100)
+     |
+     +-- sample path: samplePlayer.play(instrument, midi, time, duration, velocity)
+           -> smplr .start({ note, time, duration, velocity })
+```
+
+### MIDI Recording Flow
+
+```
+Performance Start
+  -> AudioEngine.start()
+     -> MidiRecorder.start(audioContext.currentTime)
+
+Each Beat
+  -> Scheduler.scheduleBeat()
+     -> Ensemble.tick() -> events[]
+     -> for each event: route to audio AND record
+        -> MidiRecorder.record(time, midi, duration, velocity, performerId, instrument)
+
+Export Trigger (button click)
+  -> AudioEngine.exportMidi()
+     -> MidiRecorder.stop() -> RecordedMidiEvent[]
+     -> exportToMidi(events, bpm, mode) -> Uint8Array
+     -> downloadMidi(data, filename) -> browser download
 ```
 
 ## Patterns to Follow
 
-### Pattern 1: Lookahead Scheduler (Chris Wilson pattern)
+### Pattern 1: Observer/Tap Pattern for Recording
 
-**What:** Decouple musical timing from JavaScript's unreliable `setInterval` by using it only as a wake-up call, then scheduling notes precisely using `AudioContext.currentTime`.
+**What:** MidiRecorder is a passive observer that taps into the existing event stream without modifying it. The scheduler's primary job (audio scheduling) is unaffected by whether recording is active.
 
-**When:** Always. This is the only correct way to do musical timing in the browser.
+**When:** Any time you need to capture data from a hot path without affecting its behavior.
 
-**Why:** `setInterval` jitter is 5-25ms (catastrophic for music). `AudioContext.currentTime` is sample-accurate. The lookahead pattern bridges the two: imprecise JS timer wakes up the scheduler, which precisely places notes using the audio clock.
+**Why:** Recording must never interfere with audio timing. A single `if (recording)` guard plus an array push is negligible overhead.
 
-**Example:**
-```typescript
-class AudioScheduler {
-  private audioContext: AudioContext;
-  private scheduleAheadTime = 0.1;  // seconds to look ahead
-  private timerInterval = 25;        // ms between setInterval fires
-  private timerId: number | null = null;
-  private nextNoteTime = 0;
+### Pattern 2: Personality-Driven Parameters
 
-  start() {
-    this.nextNoteTime = this.audioContext.currentTime;
-    this.timerId = window.setInterval(() => this.tick(), this.timerInterval);
-  }
+**What:** Velocity profiles are generated alongside agent personalities at creation time, following the exact same pattern as `AgentPersonality`.
 
-  private tick() {
-    while (this.nextNoteTime < this.audioContext.currentTime + this.scheduleAheadTime) {
-      // Get notes at this time from performers
-      const notes = this.getNotes(this.nextNoteTime);
-      for (const note of notes) {
-        this.scheduleNote(note, this.nextNoteTime);
-      }
-      this.advanceTime();
-    }
-  }
+**When:** Adding any new per-performer musical parameter.
 
-  private scheduleNote(note: NoteEvent, time: number) {
-    const source = this.voiceManager.createSource(note);
-    source.start(time);
-    source.stop(time + note.duration);
-  }
-}
-```
+**Why:** The existing personality system works well. Velocity is another dimension of musical personality. Keep it consistent.
 
-**Confidence:** HIGH - This is the well-established pattern from Chris Wilson's "A Tale of Two Clocks" (2013), referenced in MDN docs, and the standard approach in Tone.js and every serious Web Audio project.
+### Pattern 3: Normalized Velocity Convention
 
-### Pattern 2: Performer as Pure State Machine
+**What:** Use MIDI standard 1-127 internally everywhere. Convert to library-specific ranges only at output boundaries (midi-writer-js uses 1-100, synth-processor uses 0-1 gain scaling).
 
-**What:** Each PerformerAgent is a pure function of (own state + ensemble snapshot) -> (new state + note events). No side effects, no audio references.
+**When:** Any velocity value crosses a component boundary.
 
-**When:** Modeling performer AI decisions.
-
-**Why:** Testability. You can unit test every performer behavior without an AudioContext. Reproducibility: given the same random seed and ensemble state, you get the same decisions.
-
-**Example:**
-```typescript
-interface PerformerState {
-  id: number;
-  patternIndex: number;
-  repetitionCount: number;
-  status: 'playing' | 'silent';
-  silentBeats: number;
-  decisionWeights: DecisionWeights;
-}
-
-interface EnsembleSnapshot {
-  performers: ReadonlyArray<{ patternIndex: number; status: string }>;
-  averagePatternIndex: number;
-  density: number;  // fraction of performers currently playing
-  tick: number;
-}
-
-interface TickResult {
-  newState: PerformerState;
-  noteEvents: NoteEvent[];  // notes to schedule this tick
-}
-
-function performerTick(
-  state: PerformerState,
-  ensemble: EnsembleSnapshot,
-  patterns: Pattern[],
-  rng: () => number  // seeded random for reproducibility
-): TickResult {
-  // Decision logic here - pure function
-}
-```
-
-**Confidence:** HIGH - Standard game-AI / simulation pattern. Clean separation of logic from rendering.
-
-### Pattern 3: Immutable Ensemble Snapshot
-
-**What:** Each tick, the engine creates a frozen snapshot of all performer positions. Performers read this snapshot, never each other's mutable state.
-
-**When:** Every tick when performers need to make ensemble-aware decisions.
-
-**Why:** Prevents order-of-evaluation bugs. If performer 1 advances and performer 2 reads performer 1's new position in the same tick, you get inconsistent behavior depending on iteration order. Snapshot ensures all performers see the same world state.
-
-**Example:**
-```typescript
-// In PerformanceEngine.tick():
-const snapshot: EnsembleSnapshot = Object.freeze({
-  performers: this.performers.map(p => ({
-    patternIndex: p.state.patternIndex,
-    status: p.state.status,
-  })),
-  averagePatternIndex: this.calcAverageIndex(),
-  density: this.calcDensity(),
-  tick: this.currentTick,
-});
-
-// All performers evaluate against the SAME snapshot
-const results = this.performers.map(p => p.tick(snapshot));
-
-// Apply all state changes AFTER all decisions
-results.forEach((result, i) => {
-  this.performers[i].applyState(result.newState);
-});
-```
-
-**Confidence:** HIGH - Standard simulation pattern (equivalent to double-buffering in game engines).
-
-### Pattern 4: Score as Static Data
-
-**What:** Score patterns are pre-computed data structures. No generation during performance.
-
-**When:** Before performance starts, during mode selection / configuration.
-
-**Why:** Zero runtime cost during performance. Score data is read-only during playback. Different score modes (Riley, generated, Euclidean) produce the same data structure, so the engine doesn't care about the source.
-
-**Example:**
-```typescript
-interface Note {
-  pitch: number;       // MIDI note number
-  duration: number;    // in beats
-  offset: number;      // beat offset within pattern
-}
-
-interface Pattern {
-  id: number;
-  notes: Note[];
-  lengthInBeats: number;
-}
-
-interface Score {
-  patterns: Pattern[];
-  mode: 'riley' | 'generated' | 'euclidean';
-}
-
-// All three modes produce Score - engine is mode-agnostic
-const rileyScore = loadRileyPatterns();        // static data
-const generatedScore = generatePatterns(seed); // algorithmic
-const euclideanScore = generateEuclidean(params); // Bjorklund
-```
-
-**Confidence:** HIGH - Obvious separation of concerns.
-
-### Pattern 5: Audio Graph Setup Once, Trigger Per Note
-
-**What:** Build the per-performer signal chain (gain + panner) once at performance start. Per-note, only create ephemeral source nodes that connect to the pre-built chain.
-
-**When:** Setting up audio routing.
-
-**Why:** Creating and connecting AudioNodes is cheap but not free. The static routing (gain, pan, master bus) should be built once. Only the source nodes (OscillatorNode or AudioBufferSourceNode) are created and destroyed per note.
-
-**Example:**
-```typescript
-// Setup once per performer:
-const performerGain = audioContext.createGain();
-const performerPan = audioContext.createStereoPanner();
-performerPan.pan.value = panPosition(performerIndex, totalPerformers);
-performerGain.connect(performerPan);
-performerPan.connect(masterGain);
-
-// Per note (ephemeral):
-const osc = audioContext.createOscillator();
-osc.frequency.value = midiToFreq(note.pitch);
-osc.connect(performerGain);
-osc.start(scheduledTime);
-osc.stop(scheduledTime + note.duration);
-// osc is automatically garbage collected after stop
-```
-
-**Confidence:** HIGH - Standard Web Audio API practice.
+**Why:** Single internal convention prevents confusion. Conversion happens exactly once at each output point.
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: setTimeout for Musical Timing
+### Anti-Pattern 1: Recording at the Wrong Level
 
-**What:** Using `setTimeout` or `setInterval` directly to trigger note playback.
+**What:** Recording MIDI events in the Ensemble or inside PerformerAgent.
 
-**Why bad:** JavaScript timers have 5-25ms jitter, worse under load. 25ms at 120 BPM is an entire 16th note. The result is audibly sloppy timing -- completely unacceptable for a rhythmic performance piece.
+**Why bad:** Ensemble has no concept of real time (only beat indices). Agent events lack timing, BPM context, and instrument assignment. You would need to reconstruct timing later, which is error-prone and duplicates logic already in Scheduler.
 
-**Instead:** Use the lookahead scheduler (Pattern 1). JS timers only wake up the scheduler; actual note timing uses `AudioContext.currentTime` which is sample-accurate.
+**Instead:** Record in Scheduler.scheduleBeat() where all data converges.
 
-### Anti-Pattern 2: Performer AI in the Audio Thread
+### Anti-Pattern 2: Velocity as Post-Processing
 
-**What:** Running decision logic in an AudioWorklet or trying to do performer AI in the audio callback.
+**What:** Generating flat velocity in agents and applying humanization as a transform in the Scheduler or audio layer.
 
-**Why bad:** AudioWorklet runs on a separate thread with extreme real-time constraints. Complex decision logic risks audio glitches. Also, AudioWorklet cannot easily access the ensemble state needed for AI decisions.
+**Why bad:** Velocity is a musical decision tied to performer personality. Separating it from the agent makes it harder to have personality-driven dynamics. It also means the recorded MIDI would have flat velocity unless you add a separate humanization pass.
 
-**Instead:** All AI runs on the main thread. The audio thread only receives pre-scheduled note events. The lookahead window (100ms) provides ample time for the main thread to compute decisions.
+**Instead:** Generate velocity at the agent level so it flows naturally through both audio and recording paths.
 
-### Anti-Pattern 3: React State as Source of Truth for Engine
+### Anti-Pattern 3: Global Velocity Scaling via Master Gain
 
-**What:** Storing performer positions, transport state, or note queues in React state (useState, Redux, etc.) and having the engine read from React.
+**What:** Implementing velocity by adjusting VoicePool's masterGain or SamplePlayer's masterGain.
 
-**Why bad:** React state updates are async and batched. The engine needs immediate, synchronous access to state. Mixing React's render cycle with audio scheduling creates timing issues and unnecessary re-renders.
+**Why bad:** Master gain affects ALL voices simultaneously. Velocity must be per-note. The VoicePool masterGain exists for anti-clipping normalization, not dynamics.
 
-**Instead:** Engine owns its own state (plain TypeScript objects). React subscribes to a derived/projected view of that state. Data flows one way: Engine -> UI state -> React render.
+**Instead:** Per-voice gain scaling (synth-processor maxGain) and per-note smplr velocity parameter.
 
-### Anti-Pattern 4: One Giant "tick" That Does Everything
+### Anti-Pattern 4: Storing MIDI Events as MIDI File Format During Recording
 
-**What:** A single function that evaluates AI, schedules audio, updates UI state, and manages transport.
+**What:** Building MIDI file structures (tracks, delta times) incrementally during recording.
 
-**Why bad:** Impossible to test, impossible to profile, impossible to optimize. When timing issues arise, you can't isolate the cause.
+**Why bad:** MIDI file format uses delta times that require knowing the previous event. Insertions/removals during recording would corrupt the structure. Much simpler to store absolute-time events and convert to MIDI format on export.
 
-**Instead:** Separate concerns: `PerformanceEngine.tick()` orchestrates, but delegates to `PerformerAgent.tick()` for AI, `AudioScheduler.scheduleNote()` for audio, and a state publication mechanism for UI.
-
-### Anti-Pattern 5: Creating AudioContext on Page Load
-
-**What:** Instantiating `new AudioContext()` before user interaction.
-
-**Why bad:** Browsers require a user gesture to start an AudioContext (autoplay policy). Creating it early means it starts in `suspended` state and you need to `.resume()` on user click anyway. Creates confusing state management.
-
-**Instead:** Create AudioContext in response to the first user interaction (e.g., clicking "Start Performance"). Single, clean initialization path.
-
-## Scalability Considerations
-
-| Concern | 5 performers | 20 performers | 50 performers |
-|---------|-------------|---------------|---------------|
-| Note scheduling | Trivial. ~5 notes per tick. | Fine. ~20 notes per tick. | Monitor. ~50 notes per tick. Batch scheduling calls. |
-| AudioNode count | ~10 active source nodes | ~40 active source nodes | ~100 active source nodes. May need voice limiting (oldest-note stealing). |
-| AI computation | Negligible | Negligible | Measure. 50 agents x ensemble snapshot reads. Should still be <1ms per tick. |
-| UI re-renders | No concern | Use React.memo on performer boxes | Virtualize if needed, but 50 boxes should be fine with memo |
-| Stereo panning | Clear separation | Gets crowded but still meaningful | Diminishing returns. Consider spatial grouping. |
-
-For InTempo's use case (likely 5-20 performers), scalability is not a primary concern. The architecture handles 50+ without fundamental changes.
+**Instead:** Record simple timestamped events. Convert to MIDI file format only at export time.
 
 ## Suggested Build Order
 
-The dependency graph dictates a clear build sequence:
+Build order is dictated by the dependency chain:
 
-```
-Phase 1: Foundation
-  Score data model (Pattern, Note, Score types)
-  ScoreManager with Riley's 53 patterns (static data)
-  --> No dependencies. Pure data. Testable immediately.
+### Step 1: Velocity Humanization (no external dependencies)
 
-Phase 2: Audio Backbone
-  AudioContext creation + resume on user gesture
-  AudioScheduler (lookahead pattern)
-  VoiceManager (basic synth voice only)
-  StereoMixer (per-performer gain + pan chain)
-  --> Depends on: Score data model (for Note type)
-  --> Can play hardcoded notes to verify timing
+1. Create `VelocityProfile` type and `generateVelocityProfile()` in `src/audio/velocity.ts`
+2. Create `computeVelocity()` function
+3. Add `velocity` field to `AgentNoteEvent` interface
+4. Add `VelocityProfile` to agent state, generate in constructor
+5. Call `computeVelocity()` in `PerformerAgent.tick()`, include in returned event
+6. Write unit tests for velocity computation
 
-Phase 3: Performer AI
-  PerformerAgent state machine
-  EnsembleSnapshot mechanism
-  Decision logic (advance, repeat, dropout, rejoin, unison-seek)
-  PerformanceEngine orchestrator (tick loop, transport)
-  --> Depends on: Score data model
-  --> Testable with mocked audio (just verify note events)
+**Why first:** Zero external dependencies. Changes are additive to existing types. The velocity field on `AgentNoteEvent` is needed by both audio propagation and MIDI recording.
 
-Phase 4: Integration
-  Wire PerformanceEngine -> AudioScheduler
-  Wire PerformerAgent decisions -> note events -> scheduled audio
-  --> Depends on: Phase 2 + Phase 3
-  --> First audible performance
+### Step 2: Velocity Propagation Through Audio
 
-Phase 5: React UI
-  Transport controls (start/stop/reset/BPM)
-  Performer status grid
-  Score mode selector
-  State subscription (engine -> UI)
-  --> Depends on: Phase 3 (engine state shape)
-  --> Can develop in parallel with Phase 2 using mock state
+1. Modify `synth-processor.js` to accept velocity in noteOn message, scale gain
+2. Modify `Scheduler.scheduleBeat()` to pass `event.velocity` to voice.node.port.postMessage
+3. Modify `SamplePlayer.play()` to accept and forward velocity parameter
+4. Update Scheduler's sample path to pass velocity
 
-Phase 6: Polish
-  Sampled voices (load audio buffers)
-  Abstract geometry visualization
-  Additional score modes (generated, Euclidean)
-  Steady pulse toggle
-  Styling (GT Canon font, color palette)
-  --> Depends on: Phase 4 (working engine)
-```
+**Why second:** Depends on Step 1 (velocity values exist). Makes velocity audible immediately for testing/validation.
 
-**Key insight:** The Score data model and PerformerAgent AI can be built and thoroughly tested before any audio code exists. The AudioScheduler can be built and tested with hardcoded notes before the AI exists. These two streams converge at integration.
+### Step 3: MIDI Recording Infrastructure
+
+1. Create `MidiRecorder` class in `src/audio/midi-recorder.ts`
+2. Inject MidiRecorder into Scheduler (add constructor parameter)
+3. Add recording calls in `Scheduler.scheduleBeat()`
+4. Wire up in AudioEngine: create recorder, start on play, clear on reset
+
+**Why third:** Depends on Step 1 (velocity in events). Independent of Step 2 (recording does not need audio to work).
+
+### Step 4: MIDI Export
+
+1. Install `midi-writer-js` dependency
+2. Create `MidiExporter` in `src/audio/midi-exporter.ts`
+3. Add `exportMidi()` method to AudioEngine
+4. Add export button to UI
+
+**Why last:** Depends on Step 3 (recorded events exist). This is the user-facing output.
+
+### Step 5 (parallel with 4): Default 4 Performers
+
+1. Change `initialPerformerCount` from 8 to 4 in AudioEngine
+2. Verify VoicePool sizing, UI layout adjustments
+
+**Why:** Trivially independent. One-line change plus verification.
+
+## Files Modified vs Created
+
+| File | Action | Changes |
+|------|--------|---------|
+| `src/audio/velocity.ts` | CREATE | VelocityProfile, generateVelocityProfile, computeVelocity |
+| `src/audio/midi-recorder.ts` | CREATE | MidiRecorder class |
+| `src/audio/midi-exporter.ts` | CREATE | exportToMidi, downloadMidi functions |
+| `src/score/ensemble.ts` | MODIFY | Add velocity to AgentNoteEvent, VelocityProfile to agent state |
+| `src/audio/scheduler.ts` | MODIFY | Pass velocity to audio, feed MidiRecorder |
+| `src/audio/sampler.ts` | MODIFY | Accept velocity param in play(), forward to smplr |
+| `src/audio/engine.ts` | MODIFY | Own MidiRecorder, expose exportMidi(), change default count |
+| `src/audio/types.ts` | MODIFY | Add velocity to relevant interfaces if needed |
+| `public/synth-processor.js` | MODIFY | Accept velocity in noteOn, scale maxGain |
+| `package.json` | MODIFY | Add midi-writer-js dependency |
+
+## Scalability Considerations
+
+| Concern | Current (8 performers, ~5 min) | 16 performers, 20 min | Notes |
+|---------|-------------------------------|----------------------|-------|
+| MidiRecorder memory | ~2K events, ~100KB | ~16K events, ~800KB | Array of plain objects. No concern. |
+| MIDI export time | <50ms | <200ms | midi-writer-js builds in memory. Negligible. |
+| Velocity computation | 8 calls per beat | 16 calls per beat | Pure math, no allocations. Negligible. |
+| MIDI file size | ~20KB | ~150KB | Standard MIDI files are tiny. |
 
 ## Sources
 
-- Chris Wilson, "A Tale of Two Clocks" - the canonical Web Audio scheduling reference (training data, HIGH confidence - this is the universally cited pattern)
-- MDN Web Audio API documentation - AudioContext, OscillatorNode, AudioBufferSourceNode, StereoPannerNode, GainNode (training data, HIGH confidence - stable APIs)
-- MDN Autoplay policy documentation - user gesture requirement for AudioContext (training data, HIGH confidence - well-established browser policy)
-- General game engine architecture patterns for simulation ticks, snapshot-based evaluation (training data, HIGH confidence - established CS patterns)
-
-**Note:** WebSearch and WebFetch were unavailable during this research session. All findings are based on training data. The Web Audio API scheduling pattern and React architecture patterns are well-established and unlikely to have changed, but specific API details (e.g., new AudioWorklet capabilities) should be verified against current MDN docs during implementation.
+- [MidiWriterJS GitHub](https://github.com/grimmdude/MidiWriterJS) - v3.1.1, TypeScript support, NoteEvent velocity 1-100, Writer.buildFile() returns Uint8Array (HIGH confidence)
+- smplr type definitions at `node_modules/smplr/dist/index.d.ts` - SampleStart accepts `velocity?: number` (0-127 range) (HIGH confidence, verified from actual types)
+- synth-processor.js at `public/synth-processor.js` - maxGain hardcoded 0.3, noteOn accepts frequency+time (HIGH confidence, verified from source)
+- Existing architecture verified from direct codebase analysis of engine.ts, scheduler.ts, ensemble.ts, voice-pool.ts, sampler.ts (HIGH confidence)

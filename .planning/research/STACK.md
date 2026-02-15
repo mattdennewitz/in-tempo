@@ -1,220 +1,200 @@
-# Technology Stack
+# Technology Stack: MIDI Export & Velocity Humanization
 
 **Project:** InTempo -- Browser-Based Generative Performance Engine
-**Researched:** 2026-02-14
-**Note:** Web search and npm registry access were unavailable during research. Versions are based on training data (cutoff May 2025). All version numbers should be verified with `npm view <pkg> version` before scaffolding.
+**Researched:** 2026-02-15
+**Scope:** New capabilities only -- MIDI file export, velocity humanization, default 4 performers
 
-## Recommended Stack
+## Existing Stack (validated, not re-researched)
 
-### Core Framework
+React 19 + Vite 7 + TypeScript 5.9 + Tailwind CSS v4 + shadcn/ui, Web Audio API with AudioWorklet, smplr ^0.16.4 for sampled instruments (SplendidGrandPiano + Soundfont marimba), lookahead scheduler with eighth-note beat clock, VoicePool with voice stealing, Ensemble AI with PerformerAgent weighted decisions.
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| React | ^19.0 | UI framework | Project constraint. React 19 is stable, concurrent features help keep UI responsive during heavy audio scheduling. | MEDIUM -- v19 was stable by early 2025, likely current |
-| Vite | ^6.x | Build tool / dev server | Project constraint. Fast HMR, native ESM, excellent TypeScript support. Vite 6 shipped late 2024. | MEDIUM -- v6 likely current, verify |
-| TypeScript | ^5.7 | Type safety | Non-negotiable for a project with complex audio scheduling, pattern state machines, and performer AI. Catches timing bugs at compile time. | MEDIUM -- 5.7 likely current |
+---
 
-### UI Layer
+## New Dependencies
+
+### MIDI File Generation
 
 | Technology | Version | Purpose | Why | Confidence |
 |------------|---------|---------|-----|------------|
-| shadcn/ui | latest CLI | Component library | Project constraint. Copy-paste components mean zero runtime overhead -- critical when every JS cycle matters for audio. Not a dependency, it generates source files. | HIGH -- architecture is stable |
-| Tailwind CSS | ^4.0 | Utility CSS | shadcn/ui dependency. Tailwind v4 shipped early 2025 with CSS-first config and significant performance improvements. | MEDIUM -- v4 likely current, verify |
-| Radix UI Primitives | (via shadcn) | Accessible primitives | Comes with shadcn/ui. Handles focus management, keyboard nav for transport controls, performer grid. | HIGH |
-| lucide-react | ^0.460+ | Icons | Default shadcn icon set. Play/pause/stop transport icons, performer status indicators. | LOW -- verify version |
-| clsx + tailwind-merge | latest | Class merging | Standard shadcn utility pattern via `cn()` helper. | HIGH |
+| midi-writer-js | ^3.1.1 | Generate Standard MIDI File (.mid) for export | Purpose-built for MIDI file *writing* (not parsing). Clean API: Track, NoteEvent with velocity/pitch/duration, Writer outputs Uint8Array. Zero dependencies. TypeScript source (compiled from TS). Browser-native, no Node.js polyfills needed. | HIGH |
 
-### Audio Engine
+#### Why midi-writer-js over alternatives
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| Web Audio API (native) | N/A | Core audio engine | **Use the raw API, not Tone.js.** See rationale below. AudioContext scheduling with lookahead gives sample-accurate timing. This is the project's most critical technical choice. | HIGH |
-| AudioWorklet (native) | N/A | Custom synthesis | Runs synthesis on the audio thread, preventing main-thread jank from blocking audio. Required for smooth multi-performer playback. | HIGH |
+**@tonejs/midi (rejected):** Bidirectional read/write library. InTempo only needs write. @tonejs/midi depends on `midi-file` internally, adding unnecessary parsing code. Its API is time-based (seconds) rather than musical (beats/ticks), requiring manual tempo-to-time conversion. midi-writer-js speaks in musical durations natively (`'8'` for eighth note, `'4'` for quarter) which maps directly to InTempo's eighth-note beat clock.
 
-#### Why NOT Tone.js
+**jsmidgen (rejected):** Unmaintained (last commit 2018). No TypeScript types. String-based output requires conversion.
 
-This is the single most important stack decision for InTempo. Tone.js (v15.x, last major update mid-2024) is the go-to Web Audio abstraction, but it is wrong for this project:
+**JZZ.js (rejected):** Full MIDI stack (hardware I/O, Web MIDI API, real-time). Massive overkill for file generation. ~100KB+ bundle.
 
-1. **Abstraction fights the architecture.** Tone.js manages its own Transport clock, scheduling queue, and audio graph lifecycle. InTempo needs direct control over AudioContext.currentTime lookahead scheduling for 10-30+ simultaneous performers. Tone's Transport adds a layer that makes custom scheduling harder, not easier.
+**Raw MIDI binary (rejected):** SMF is a well-specified binary format but writing it manually means reimplementing chunk headers, variable-length quantities, running status, and track termination. midi-writer-js is ~15KB and handles all of this correctly. Not worth hand-rolling.
 
-2. **Bundle size.** Tone.js is ~150KB minified. InTempo only needs OscillatorNode, GainNode, StereoPannerNode, AudioBufferSourceNode, and a scheduling loop. That is perhaps 200 lines of custom code vs. a large dependency.
+#### midi-writer-js API mapping to InTempo
 
-3. **AudioWorklet friction.** Tone.js has limited AudioWorklet integration. InTempo's synth voices benefit from AudioWorklet processors for wavetable/FM synthesis without main-thread overhead.
-
-4. **Debugging.** When timing goes wrong (and it will), debugging your own 200-line scheduler is trivial. Debugging Tone.js internals is not.
-
-**What to build instead:**
-- A `SchedulerService` using the classic "lookahead + setTimeout" pattern (Chris Wilson's "A Tale of Two Clocks" -- the canonical approach)
-- A thin `AudioEngine` class wrapping AudioContext creation, node factory methods, and master gain/compressor
-- Per-performer `Voice` classes that create/connect/disconnect audio nodes
-
-This is more code upfront but dramatically simpler to debug and optimize.
-
-### State Management
-
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| Zustand | ^5.0 | Application state | Lightweight (1KB), no boilerplate, excellent React 19 compatibility. Perfect for performer states, performance config, UI state. Does not try to manage audio state -- keeps the boundary clean. | MEDIUM -- v5 likely current |
-
-#### Why NOT Redux, Jotai, or React Context
-
-- **Redux:** Massive overkill. InTempo's state is straightforward -- performance config, array of performer states, UI toggles. Redux's ceremony adds nothing.
-- **Jotai:** Good library, but atom-based state is awkward for the "array of performers with shared config" pattern. Zustand's single-store model maps naturally to this domain.
-- **React Context:** Fine for static config (theme, color palette), but causes unnecessary re-renders for frequently-changing performer states (current pattern, playing/silent). Zustand's selector pattern avoids this.
-
-**Zustand store structure:**
 ```typescript
-interface PerformanceStore {
-  // Config (changes before/between performances)
-  bpm: number;
-  performerCount: number;
-  scoreMode: 'riley' | 'generated' | 'euclidean';
+import MidiWriter from 'midi-writer-js';
 
-  // Runtime state (changes during performance)
-  isPlaying: boolean;
-  performers: PerformerState[];
-  currentBeat: number;
+// One Track per performer (maps to PerformerAgent)
+const track = new MidiWriter.Track();
+track.setTempo(120); // from scheduler._bpm
 
-  // Actions
-  start: () => void;
-  stop: () => void;
-  reset: () => void;
-  setBpm: (bpm: number) => void;
+// NoteEvent maps directly from AgentNoteEvent
+new MidiWriter.NoteEvent({
+  pitch: 60,           // from event.midi (MIDI note number)
+  duration: 'd8',      // 'd8' = dotted eighth, '8' = eighth note
+  velocity: 80,        // from humanized velocity (1-100 range)
+  channel: 1,          // performer channel assignment
+});
+
+// Export: Writer accepts array of tracks (multi-track Type 1 MIDI)
+const writer = new MidiWriter.Writer([track1, track2, track3, track4]);
+const blob = new Blob([writer.buildFile()], { type: 'audio/midi' });
+```
+
+**Key detail:** midi-writer-js velocity range is 1-100 (not 0-127). The library internally scales to MIDI's 0-127 range. This is a design choice, not a bug. Map InTempo's 0-127 velocity to 1-100 via `Math.round(velocity * 100 / 127)`.
+
+### No Other New Dependencies Required
+
+Velocity humanization and the default-4-performers change require zero new libraries. Both are algorithmic changes to existing code.
+
+---
+
+## Integration Points with Existing Code
+
+### 1. Velocity: AgentNoteEvent needs a `velocity` field
+
+**Current state:** `AgentNoteEvent` has `{ performerId, midi, duration }`. No velocity.
+
+**Change:** Add `velocity: number` (0-127, MIDI standard) to `AgentNoteEvent` in `src/audio/types.ts`.
+
+**Upstream (Ensemble/PerformerAgent):** The `PerformerAgent.tick()` method returns `AgentNoteEvent`. Velocity must be computed here, per-performer, using the humanization algorithm. Each performer's `AgentPersonality` should gain a `velocityBias` and `velocityVariance` to create per-performer dynamic character.
+
+**Downstream consumers that must handle velocity:**
+
+| Consumer | File | Current | Change Needed |
+|----------|------|---------|---------------|
+| Scheduler (synth path) | `src/audio/scheduler.ts` | Posts `{ type: 'noteOn', frequency, time }` to AudioWorkletNode | Add `velocity` to the message: `{ type: 'noteOn', frequency, time, velocity }` |
+| SynthProcessor | `public/synth-processor.js` | `this.maxGain = 0.3` fixed | Scale `maxGain` by velocity: `this.noteGain = (velocity / 127) * 0.3` |
+| Scheduler (sampler path) | `src/audio/scheduler.ts` | Calls `samplePlayer.play(instrument, midi, time, duration)` | Add velocity parameter |
+| SamplePlayer | `src/audio/sampler.ts` | `target.start({ note: midi, time, duration })` | Add velocity: `target.start({ note: midi, time, duration, velocity })` -- smplr already supports velocity 0-127 natively |
+| MIDI Recorder (new) | New file | N/A | Records AgentNoteEvents with velocity for export |
+
+### 2. MIDI Export: Event Recording Architecture
+
+**Where to tap:** The Scheduler's `scheduleBeat()` method is the single point where all performer note events flow. This is where a MIDI recorder should observe events.
+
+**Pattern:** Observer/tap on `scheduleBeat()`. The recorder accumulates events with timestamps relative to performance start. On export, it converts to midi-writer-js Track/NoteEvent objects.
+
+```
+Ensemble.tick() -> AgentNoteEvent[] -> Scheduler.scheduleBeat()
+                                         |
+                                         +-> Audio playback (existing)
+                                         +-> MidiRecorder.record() (new)
+```
+
+**Timestamp strategy:** Record `beatIndex` (integer eighth-note count from performance start), not `AudioContext.currentTime`. Beat-based timestamps convert cleanly to MIDI ticks. Time-based timestamps require reverse-engineering BPM, which breaks if BPM changes during performance.
+
+### 3. Default 4 Performers
+
+**Current:** `AudioEngine.initialPerformerCount = 8`
+
+**Change:** Set to `4`. One-line change in `src/audio/engine.ts`. VoicePool size follows (`performerCount * 2`), so 8 voices instead of 16. This is a tuning change, not an architectural one.
+
+---
+
+## Velocity Humanization Algorithm (No Library Needed)
+
+Build this in-house. It is 30-50 lines of TypeScript, not a library problem.
+
+### Approach: Layered velocity with per-performer personality
+
+```typescript
+function computeVelocity(
+  baseVelocity: number,     // 80 (mf) default
+  beatPosition: number,     // 0-based eighth note within pattern
+  patternLength: number,    // total eighth notes in pattern
+  personality: AgentPersonality,
+): number {
+  // Layer 1: Metric accent (downbeats louder)
+  const metricAccent = beatPosition % 4 === 0 ? 12
+                     : beatPosition % 2 === 0 ? 6
+                     : 0;
+
+  // Layer 2: Per-performer bias (some play louder/softer)
+  const personalBias = (personality.velocityBias - 1.0) * 20; // +/- 4
+
+  // Layer 3: Random jitter (humanization)
+  const jitter = (Math.random() - 0.5) * personality.velocityVariance * 2;
+
+  // Layer 4: Phrase shaping (slight crescendo/decrescendo across pattern)
+  const phrasePosition = beatPosition / Math.max(1, patternLength - 1);
+  const phraseShape = Math.sin(phrasePosition * Math.PI) * 8; // arc shape
+
+  return Math.max(30, Math.min(127,
+    Math.round(baseVelocity + metricAccent + personalBias + jitter + phraseShape)
+  ));
 }
 ```
 
-### Visualization
+### Personality Extensions
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| Canvas API (native) | N/A | Per-performer geometry | Abstract geometry visualizations. Canvas 2D is sufficient for geometric shapes, lighter than WebGL, and the rendering can be throttled independently of audio. | HIGH |
+Add to `AgentPersonality` in `src/score/ensemble.ts`:
 
-#### Why NOT Three.js, Pixi.js, or SVG
+```typescript
+velocityBias: number;     // 0.8-1.2 (some performers naturally louder/softer)
+velocityVariance: number; // 5-20 (amount of random jitter in velocity)
+```
 
-- **Three.js / Pixi.js:** InTempo's visualizations are abstract 2D geometry, not 3D scenes or sprite-heavy games. These libraries add 100KB+ for capabilities not needed. The project description calls for "abstract geometry" -- circles, polygons, lines -- which Canvas 2D handles natively.
-- **SVG:** DOM-based rendering for 10-30 simultaneous animated elements creates GC pressure and layout thrashing. Canvas is a single bitmap, no DOM nodes per shape.
-- **React-Canvas libs (react-konva, etc.):** Add abstraction without benefit. A custom `useCanvas` hook with requestAnimationFrame is ~50 lines and gives full control.
+Generate in `generatePersonality()`:
 
-### Fonts and Styling
+```typescript
+velocityBias: randomInRange(0.8, 1.2),
+velocityVariance: randomInRange(5, 20),
+```
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| GT Canon | user-provided | Primary typeface | Project constraint. Load via @font-face in CSS, preload in HTML head to prevent FOIT. | HIGH |
-| CSS custom properties | N/A | Color palette | Define Semafor/FT-inspired palette as CSS variables. Tailwind v4's CSS-first config integrates natively with custom properties. | HIGH |
+---
 
-### Dev Tooling
+## What NOT to Add
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| ESLint | ^9.x | Linting | Flat config format (eslint.config.js). Use typescript-eslint for type-aware rules. | MEDIUM |
-| Prettier | ^3.x | Formatting | End formatting debates. Integrates with ESLint via eslint-config-prettier. | HIGH |
-| Vitest | ^2.x | Unit testing | Native Vite integration, same config, fast. Test the scheduler math, Euclidean algorithm, performer AI decision logic. | MEDIUM -- v2 likely current |
+| Temptation | Why Avoid |
+|------------|-----------|
+| Tone.js for MIDI | Already rejected in Phase 1. MIDI export is file generation, not audio. |
+| @tonejs/midi | Bidirectional when we only write. midi-writer-js is leaner and speaks musical durations. |
+| Web MIDI API | For hardware MIDI I/O (controllers, synths). InTempo exports files, not real-time MIDI streams. |
+| ML-based humanization (midihum) | Python-only, 400 features, trained on piano competition data. Extreme overkill for a generative art piece. Simple layered velocity is musically appropriate for In C's minimalist aesthetic. |
+| file-saver.js | `URL.createObjectURL()` + `<a download>` is 5 lines. No library needed for browser file download. |
+| Zustand | Already not in the project (state flows via AudioEngine callbacks). Do not add for MIDI recording state -- keep it in the engine layer. |
 
-### Utilities
-
-| Library | Version | Purpose | When to Use | Confidence |
-|---------|---------|---------|-------------|------------|
-| @tonaljs/tonal | ^6.x | Music theory | Note/interval/scale calculations for pattern generation. Lightweight, tree-shakeable. Use for algorithmic score generation mode, NOT for audio playback. | MEDIUM |
-
-#### Why NOT other music theory libs
-
-- **teoria:** Unmaintained since 2020.
-- **tonal (older API):** The `@tonaljs` scoped packages are the maintained successor. Import only what you need: `@tonaljs/note`, `@tonaljs/interval`, `@tonaljs/scale`.
+---
 
 ## Alternatives Considered
 
 | Category | Recommended | Alternative | Why Not |
 |----------|-------------|-------------|---------|
-| Audio | Raw Web Audio API | Tone.js | Abstraction fights custom scheduling; see detailed rationale above |
-| Audio | Raw Web Audio API | Howler.js | Howler is for sound effects/playback, not synthesis or precise scheduling |
-| State | Zustand | Redux Toolkit | Overkill for this domain's state shape |
-| State | Zustand | Jotai | Atom model awkward for array-of-performers pattern |
-| Viz | Canvas 2D | Three.js | 3D engine for 2D geometry is wasteful |
-| Viz | Canvas 2D | SVG | DOM overhead with 10-30 animated elements |
-| Viz | Canvas 2D | Pixi.js | WebGL renderer for simple geometry is overkill |
-| Music theory | @tonaljs/tonal | Tone.js (theory parts) | Brings entire audio lib as dependency for note math |
-| Build | Vite | Next.js | No SSR needed; SPA is the correct architecture for a real-time audio app |
-| Build | Vite | Webpack | Slower, more config, no advantage here |
+| MIDI generation | midi-writer-js | @tonejs/midi | Write-only need; midi-writer-js has musical duration API matching InTempo's beat model |
+| MIDI generation | midi-writer-js | Raw binary | SMF format is well-specified but fiddly (VLQ encoding, chunk headers). 15KB lib saves debugging time. |
+| MIDI generation | midi-writer-js | jsmidgen | Unmaintained since 2018, no TypeScript |
+| Humanization | Custom algorithm | midihum ML | Python-only, extreme overkill for minimalist generative music |
+| Humanization | Custom algorithm | Random velocity only | Sounds mechanical. Metric accents + phrase shaping + personality make it musical. |
+| File download | Native Blob + URL API | file-saver.js | 5 lines of native code, no dependency warranted |
 
-## Architecture Notes for Stack Integration
-
-### Audio-UI Boundary (Critical)
-
-The audio engine and React UI must be decoupled:
-
-```
-React UI (main thread)
-  |
-  v
-Zustand Store (shared state)
-  |
-  v
-AudioEngine (main thread, owns AudioContext)
-  |
-  v
-AudioWorklet (audio thread, runs synthesis)
-```
-
-- React never touches AudioNodes directly
-- AudioEngine reads from Zustand store for config (BPM, performer count)
-- AudioEngine writes to Zustand store for display state (current pattern, beat position)
-- The scheduler loop runs via `setTimeout` on the main thread but schedules notes using `AudioContext.currentTime` (the "two clocks" pattern)
-
-### Sample Loading Strategy
-
-For sampled instruments:
-- Decode audio files with `AudioContext.decodeAudioData()`
-- Store decoded `AudioBuffer` objects in a cache (plain Map, not React state)
-- Create new `AudioBufferSourceNode` per note (they are one-shot by design)
-- Preload all samples before performance starts -- do NOT lazy-load during playback
-
-### Euclidean Rhythm Generation
-
-Bjorklund's algorithm is ~30 lines of TypeScript. Do NOT add a dependency for this. Implement it directly:
-
-```typescript
-function euclidean(onsets: number, steps: number): boolean[] {
-  // Bjorklund's algorithm
-  // Returns array of length `steps` with `onsets` evenly distributed
-}
-```
+---
 
 ## Installation
 
 ```bash
-# Scaffold
-npm create vite@latest intempo -- --template react-ts
+# Single new dependency
+npm install midi-writer-js
 
-# Core UI
-npx shadcn@latest init
-npm install zustand
-
-# Music theory (tree-shakeable, import only needed modules)
-npm install @tonaljs/tonal
-
-# Dev tooling
-npm install -D eslint @eslint/js typescript-eslint eslint-config-prettier prettier vitest @testing-library/react
+# That's it. Everything else is algorithmic changes to existing code.
 ```
 
-Note: No audio libraries to install. Web Audio API is a browser native. That is the point.
-
-## Version Verification Checklist
-
-All versions below should be verified with `npm view <pkg> version` before project scaffolding, as they are based on May 2025 training data:
-
-- [ ] `react` -- expected ^19.0
-- [ ] `vite` -- expected ^6.x
-- [ ] `typescript` -- expected ^5.7
-- [ ] `tailwindcss` -- expected ^4.x
-- [ ] `zustand` -- expected ^5.x
-- [ ] `@tonaljs/tonal` -- expected ^6.x
-- [ ] `vitest` -- expected ^2.x
-- [ ] `eslint` -- expected ^9.x
+---
 
 ## Sources
 
-- Training data (cutoff May 2025) -- all version numbers are MEDIUM confidence
-- Chris Wilson, "A Tale of Two Clocks" (web.dev) -- canonical Web Audio scheduling pattern
-- Web Audio API specification (W3C) -- AudioWorklet, AudioContext.currentTime
-- Bjorklund, "The Theory of Rep-Rate Pattern Generation in the SNS Timing System" (2003) -- Euclidean rhythm algorithm
-- Project constraints from `.planning/PROJECT.md`
+- [MidiWriterJS GitHub](https://github.com/grimmdude/MidiWriterJS) -- API documentation, NoteEvent options (velocity 1-100), Writer.buildFile() -> Uint8Array
+- [MidiWriterJS npm](https://www.npmjs.com/package/midi-writer-js) -- v3.1.1 latest, weekly downloads ~1.5K
+- [@tonejs/midi GitHub](https://github.com/Tonejs/Midi) -- Evaluated and rejected; bidirectional read/write, time-based API
+- [smplr GitHub](https://github.com/danigb/smplr) -- Confirmed velocity support in start() method, 0-127 range
+- Existing codebase analysis: `src/audio/scheduler.ts`, `src/audio/voice-pool.ts`, `src/audio/engine.ts`, `src/score/ensemble.ts`, `public/synth-processor.js`
+- MIDI specification -- Standard velocity range 0-127, SMF Type 1 for multi-track

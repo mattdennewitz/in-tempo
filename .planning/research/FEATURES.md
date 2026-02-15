@@ -1,162 +1,248 @@
 # Feature Landscape
 
-**Domain:** Browser-based generative music performance engine
-**Researched:** 2026-02-14
-**Confidence:** MEDIUM (training data knowledge of generative.fm, Chrome Music Lab, Tone.js ecosystem, Strudel, Gibber; no live verification available)
+**Domain:** MIDI export and velocity humanization for browser-based generative performance engine
+**Researched:** 2026-02-15
+**Scope:** New milestone features only (MIDI file export, velocity humanization, default 4 performers)
+**Confidence:** MEDIUM-HIGH (MidiWriterJS API verified via web search and npm; velocity humanization patterns well-documented in production music literature; existing codebase reviewed)
 
-## Reference Applications
+## Context: What Already Exists
 
-| Application | Type | Key Features | Relevance to InTempo |
-|---|---|---|---|
-| generative.fm | Ambient generative streaming | Infinite playback, multiple generators, background listening, timer/sleep mode | Generative audio in browser, spectator model |
-| Chrome Music Lab | Interactive music education | Visual experiments (Song Maker, Rhythm, Spectrogram, etc.), touch/click interaction | Web Audio basics, visualization patterns |
-| Strudel (TidalCycles port) | Live coding music | Pattern language, real-time code evaluation, multi-voice, visualization | Algorithmic composition in browser, pattern systems |
-| Gibber | Live coding audiovisual | Code-based music generation, WebGL visuals synced to audio, collaborative | Audio + visualization pairing |
-| Tone.js demos | Library showcases | Synth playgrounds, sequencers, effects chains, interactive controls | Web Audio abstraction patterns |
-| Orca | Visual programming sequencer | Grid-based operators, MIDI/OSC output, spatial layout | Multi-agent musical behavior on a grid |
-| Patatap | Audiovisual toy | Keystroke-triggered sounds + animations, minimal UI | Sound-visual pairing, aesthetic focus |
+The following are already built and should NOT be re-implemented:
+
+- Three composition modes (riley, generative, euclidean) with score generation
+- Ensemble AI with weighted decisions, band enforcement, dropout/rejoin
+- Canvas visualization with per-performer geometry
+- Sampled instruments (piano, marimba) + synth via AudioWorklet
+- Dynamic performer add/remove during playback
+- Transport controls (start/stop/reset), BPM slider, pulse toggle
+- Score mode selector UI
+
+The scheduler already produces `AgentNoteEvent` objects with `performerId`, `midi`, and `duration` on every tick. This is the hook point for both MIDI recording and velocity humanization.
 
 ## Table Stakes
 
-Features users expect from any browser-based generative music application. Missing any of these and InTempo feels broken or amateurish.
+Features users expect when a generative music app offers MIDI export. Missing these and the feature feels half-baked.
 
-| Feature | Why Expected | Complexity | Notes |
-|---|---|---|---|
-| **Audio playback start/stop** | Fundamental. Every music app has play/pause. Web Audio requires user gesture to start AudioContext. | Low | Must handle AudioContext resume on user gesture (browser autoplay policy) |
-| **Audible output that sounds musical** | Users will close the tab in seconds if it sounds like random noise. Timbres must be pleasant, tuning correct, rhythm coherent. | High | This is the core product. Synth/sample quality is paramount. |
-| **Responsive UI during playback** | If the UI freezes or stutters during audio, trust is destroyed. Audio and UI must be decoupled. | Medium | Web Audio runs on separate thread; React rendering must not block audio scheduling |
-| **Volume control** | Every audio application needs a master volume. Users will mute the tab otherwise. | Low | Single gain node at output |
-| **Visual feedback that something is happening** | Generative music is invisible by nature. Without visual motion, users wonder if the app is working. | Medium | Per-performer status indicators at minimum |
-| **Graceful start and end** | Abrupt starts (all voices at once) and abrupt stops (audio cuts mid-note) feel broken. | Medium | Staggered entry and fadeout are musically correct for "In C" anyway |
-| **BPM / tempo control** | Standard in any rhythm-based music app. Users expect to adjust speed. | Low | Must be settable before performance; mid-performance changes are a stretch goal |
-| **Loading state / audio readiness indicator** | Web Audio samples and AudioWorklets take time to load. Users need to know when the app is ready. | Low | Show loading progress, disable play until ready |
-| **Works without interaction after start** | Generative music apps are "set and forget." If it requires ongoing clicks to keep playing, it's not generative. | Low | Core to spectator model -- this is already the design intent |
-| **Error recovery / browser compatibility messaging** | Web Audio has quirks. Safari has different behavior. Users need clear messaging when something fails. | Low | Target Chromium-first, but graceful degradation messaging |
+| Feature | Why Expected | Complexity | Dependencies |
+|---------|--------------|------------|--------------|
+| **Download as .mid file** | The fundamental promise. Users click export, get a standard MIDI file that opens in any DAW. | Medium | MidiWriterJS library, event recording buffer |
+| **One track per performer** | DAW users expect to see separate tracks they can edit independently. Format 0 (single track) is useless for multi-performer output. | Low | MIDI Format 1 support in MidiWriterJS (built-in) |
+| **Correct tempo in MIDI metadata** | If the BPM in the MIDI file doesn't match what was playing, every note lands wrong when imported into a DAW. | Low | Read BPM from engine state, set on MIDI tempo track |
+| **Velocity values on every note** | MIDI without velocity is flat and lifeless. Every note needs a velocity value (1-127). This is where humanization lives. | Low | Velocity data must exist in the event pipeline |
+| **Track names identifying performers** | "Track 1, Track 2" is acceptable but "Performer 1 (Piano)", "Performer 2 (Synth)" is expected. DAW users orient by track names. | Low | Track name meta-event in MidiWriterJS |
+| **Instrument program changes** | MIDI files should specify General MIDI program numbers so DAWs auto-assign roughly correct sounds (piano, marimba, synth pad). | Low | Program change events at track start |
+| **Export available after stopping** | Users who stop a performance should be able to export what was recorded up to that point. Not just on completion. | Low | Buffer persists across stop, cleared on reset |
+| **Default 4 performers** | The milestone specifies this. 4 is a better default than 8 for first-time listeners -- less chaotic, more intelligible, still demonstrates ensemble behavior. | Low | Change `initialPerformerCount` from 8 to 4 in `AudioEngine` |
 
 ## Differentiators
 
-Features that set InTempo apart from the generative music landscape. These are not expected but create the unique value proposition.
+Features that elevate InTempo's MIDI export beyond "dump notes to file."
 
-| Feature | Value Proposition | Complexity | Notes |
-|---|---|---|---|
-| **Emergent ensemble AI behavior** | No other browser generative app simulates believable ensemble musicians making context-aware decisions. generative.fm uses procedural generation; Chrome Music Lab is interactive toys; Strudel is user-coded patterns. InTempo's performers "listen" to each other. | High | Core differentiator. Density-awareness, unison-seeking, dropout/rejoin logic. Must feel alive, not random. |
-| **Multiple composition modes (Riley / Generative / Euclidean)** | One engine, three distinct musical experiences. Most browser music apps do one thing. This gives replay value and musical range. | Medium | Modes share the same performer/scheduling engine but differ in score generation |
-| **Dynamic performer count** | Adding/removing performers mid-performance changes the texture in real-time. Most generative apps have fixed voice counts. | Medium | Must handle audio resource management (creating/destroying oscillators/samplers gracefully) |
-| **Per-performer abstract geometry visualization** | Transforms spectating into a visual experience. Each performer has a unique visual identity tied to their musical state. Patatap showed sound-visual pairing works; InTempo makes it continuous and per-agent. | High | Needs performant rendering (Canvas or WebGL) that doesn't compete with audio thread |
-| **Faithful "In C" rule system** | Musicologically grounded -- not arbitrary rules. Sequential traversal, pattern band enforcement, natural ending. Appeals to music nerds and minimalism fans who know the piece. | Medium | The rules themselves are simple; making them produce compelling results is the challenge |
-| **Stereo field placement** | Performers spread across the stereo field creates spatial depth uncommon in browser audio apps. Most browser music is mono or simple stereo. | Low | StereoPannerNode per performer. Simple but effective. |
-| **Spectator-only interaction model** | Counterintuitive but powerful: you configure and watch. Like a musical aquarium or fireplace. This is a deliberate design choice, not a missing feature. Aligns with how "In C" actually works -- the audience watches. | Low | The "feature" is restraint. UI must make it clear this is intentional. |
-| **Natural performance arc** | Performances have a beginning (staggered entry), middle (density peaks, phase relationships), and end (performers reaching pattern 53 and dropping out). This narrative arc is rare in generative apps, which tend toward infinite/looping. | Medium | Score precalculation enables this. The AI behavior shapes the arc. |
-| **Configurable instrument palette** | Mix of synthesis and samples, randomly assigned. Each performance sounds different not just structurally but timbrally. | Medium | Requires building a decent instrument library. Sample loading adds complexity. |
+| Feature | Value Proposition | Complexity | Dependencies |
+|---------|-------------------|------------|--------------|
+| **Per-note velocity humanization** | Subtle velocity variation (+-10-15% around a base) makes every performance sound alive rather than mechanical. Applied to BOTH audio playback and MIDI output simultaneously. This is the feature that makes exported MIDI actually usable in a DAW without manual humanization. | Medium | Gaussian-like random distribution, per-performer personality bias, integration into scheduler |
+| **Performer personality affects velocity curve** | Each performer already has an `AgentPersonality` with biases. Extending this to velocity means some performers naturally play louder/softer, creating timbral depth. Performer 1 might hover around velocity 85, Performer 3 around 100. | Low | Extend `AgentPersonality` with `velocityCenter` and `velocitySpread` |
+| **Contextual velocity dynamics** | Notes at pattern beginnings slightly louder (accent), repeated patterns gradually softer (fatigue/relaxation), rejoin after silence slightly louder (re-entry energy). Mimics how real musicians play In C. | Medium | Pattern position awareness in velocity calculation |
+| **Export during playback** | Most apps require stopping first. Letting users export a snapshot mid-performance ("I like what's happening right now") captures the generative magic at its peak. | Low | Clone the recording buffer without stopping |
+| **Descriptive filename** | Auto-generated filename like `intempo-riley-120bpm-4perf-2026-02-15.mid` tells users what's inside without opening it. Better than "download.mid". | Low | String template from engine state |
+| **Density-responsive velocity** | When ensemble density is high (many performers playing), individual velocities drop slightly. When sparse, they rise. Mimics acoustic reality where musicians play softer in a crowd. | Low | Read density from ensemble snapshot during velocity calculation |
 
 ## Anti-Features
 
-Features to explicitly NOT build. Each is a deliberate design choice.
+Features to explicitly NOT build for this milestone.
 
 | Anti-Feature | Why Avoid | What to Do Instead |
-|---|---|---|
-| **User plays along / conducts** | Breaks the spectator model. The magic of "In C" is emergent behavior from autonomous performers. User intervention makes it a sequencer, not a simulation. | Let users configure parameters before performance, then watch. The constraint IS the feature. |
-| **Real-time multiplayer** | Massive complexity (WebRTC/WebSocket sync, latency compensation, conflict resolution) for uncertain value. Network audio sync is an unsolved hard problem in browsers. | Single-user local experience. Revisit in v2 only if validated. |
-| **MIDI output** | Adds complexity, requires MIDI device handling, serves a tiny niche of users who would connect hardware. Browser MIDI API support is inconsistent. | Browser audio output only. The experience is self-contained. |
-| **Recording / audio export** | MediaRecorder API quality is inconsistent. Offline rendering via OfflineAudioContext is complex to wire up. Defer to v2. | Users can use system audio capture (e.g., BlackHole, OBS) if they want to record. |
-| **Mobile layout** | Touch targets, small screens, and mobile audio restrictions (especially iOS Safari) add disproportionate complexity. The visualization needs screen real estate. | Desktop-first. Responsive enough not to break on tablets, but not optimized for phones. |
-| **Social features (sharing, profiles, likes)** | This is a performance engine, not a social platform. Adding accounts and sharing infrastructure distracts from the core experience. | Share via URL with encoded performance parameters (seed, BPM, performer count). Stateless sharing. |
-| **Complex parameter tweaking during performance** | Exposes internals, makes the UI complex, breaks the "aquarium" simplicity. Too many knobs turns it into a DAW. | Pre-performance configuration only. Keep the running performance clean and visual. |
-| **Persistent state / saved performances** | Database, auth, storage infrastructure for something that should be ephemeral. Each performance is unique -- that's the point. | URL-encoded seeds for reproducible configurations. No backend needed. |
-| **Tutorial / onboarding flow** | The app should be immediately understandable. If it needs a tutorial, the UI has failed. A brief "About" modal is sufficient. | Self-explanatory UI. "About" link explaining the concept of "In C" for curious users. |
-| **Equalizer / effects chain UI** | Turns it into a mixing console. Users are spectators, not audio engineers. | Bake good reverb/effects into the instrument design. The mix should sound good by default. |
+|--------------|-----------|-------------------|
+| **Real-time MIDI output to hardware** | Web MIDI API support is inconsistent (no Firefox/Safari). Adds device enumeration, latency management, error handling for disconnects. Completely different feature from file export. | File export only. Real-time MIDI out is a separate future milestone if ever. |
+| **MIDI import / load** | InTempo generates its own scores. Importing external MIDI contradicts the generative premise and requires a parser, note-to-pattern mapping, and UI for file selection. | Not applicable to this product's design. |
+| **Per-track velocity/volume sliders in UI** | Turns the spectator experience into a mixing console. Breaks the "aquarium" design philosophy. | Velocity humanization is automatic and personality-driven. No user knobs. |
+| **WAV/MP3 audio export** | MediaRecorder API quality is inconsistent. OfflineAudioContext rendering requires rewiring the entire audio graph. Much harder than MIDI export for marginal additional value. | MIDI export only. Users render audio in their DAW from the MIDI file. |
+| **Configurable humanization amount** | Exposing "humanization intensity" as a slider adds UI complexity for a parameter most users won't understand. The default should just sound good. | Bake in sensible defaults. Possibly expose as an advanced/hidden option later. |
+| **MIDI CC data (sustain pedal, mod wheel, etc.)** | Adds complexity for minimal value. InTempo's performers don't model continuous controllers. The note data is what matters. | Note on/off with velocity only. Clean, simple MIDI that's easy to edit in a DAW. |
+| **Multiple export formats (MusicXML, ABC notation)** | Scope creep. MIDI is the universal interchange format for this use case. | MIDI only. |
+| **Undo/redo for recording** | There's nothing to undo. The recording is a passive capture of what happened. | Export what was recorded. Reset clears the buffer. |
 
 ## Feature Dependencies
 
 ```
-AudioContext initialization → All audio features
+Existing Scheduler tick loop (produces AgentNoteEvent[])
   |
-  +→ Instrument loading (synths + samples) → Performer audio output
-  |    |
-  |    +→ Stereo panning → Spatial placement
-  |    +→ Volume control → Master gain
+  +-> Velocity Humanization Layer (NEW)
+  |     |
+  |     +-> Per-performer velocity personality (extends AgentPersonality)
+  |     +-> Contextual dynamics (pattern position, density)
+  |     +-> Gaussian-like random spread (utility function)
+  |     |
+  |     +-> Applied to audio playback (pass velocity to SamplePlayer/VoicePool)
+  |     +-> Applied to MIDI recording buffer (store velocity with each event)
   |
-  +→ Score generation (Riley patterns / Generative / Euclidean)
-  |    |
-  |    +→ Performer AI behavior → Ensemble emergent behavior
-  |         |
-  |         +→ Dynamic performer add/remove
-  |         +→ Natural performance arc (staggered start/end)
+  +-> MIDI Recording Buffer (NEW)
+  |     |
+  |     +-> Captures: performerId, midi, duration, velocity, tick timestamp
+  |     +-> Persists across stop (cleared on reset)
+  |     +-> Cloneable for mid-playback export
   |
-  +→ Pulse (eighth-note high C) → Toggleable during performance
-  |
-  +→ BPM clock → Drives all scheduling
+  +-> MIDI Export Service (NEW)
+        |
+        +-> MidiWriterJS (npm dependency)
+        +-> Buffer -> multi-track MIDI file conversion
+        +-> Track naming (performer ID + instrument)
+        +-> Tempo meta-event from engine BPM
+        +-> Program change events (GM instrument mapping)
+        +-> Blob -> download trigger (anchor click pattern)
+        +-> Filename generation from engine state
 
-Score generation → Per-performer visualization (needs pattern data)
-  |
-  +→ Abstract geometry rendering → Canvas/WebGL setup
-
-Performer AI → Per-performer status display (playing/silent, pattern number)
-
-UI Framework (React + shadcn) → All controls and display
-  |
-  +→ Pre-performance config (BPM, performer count, mode selection)
-  +→ Performance controls (start/stop/reset)
-  +→ Performance display (visualizations + status)
+Default performer count change: AudioEngine.initialPerformerCount = 4
+  (independent of above, no dependencies)
 ```
+
+## Velocity Humanization Design
+
+### Base Algorithm
+
+Each note's velocity should be computed as:
+
+```
+baseVelocity = performerVelocityCenter  (e.g., 75-100, per personality)
+spread = performerVelocitySpread         (e.g., 8-15, per personality)
+contextModifier = f(patternPosition, density, reentryState)
+rawVelocity = baseVelocity + gaussianRandom() * spread + contextModifier
+finalVelocity = clamp(rawVelocity, 30, 120)
+```
+
+### Recommended Ranges (from production music research)
+
+| Parameter | Range | Rationale |
+|-----------|-------|-----------|
+| Base velocity center | 75-100 | Leaves headroom above and below. 127 max is too hot; below 60 is inaudible on many patches. |
+| Velocity spread (std dev) | 8-15 | 10-15% variation is the industry standard for subtle humanization. Too much sounds drunk; too little sounds robotic. |
+| Pattern-start accent | +5 to +10 | Mimics natural downbeat emphasis. |
+| Density reduction | -5 to -15 at high density | Real musicians play softer when many are playing. |
+| Re-entry boost | +8 to +12 | Musicians re-entering after silence play with energy. |
+
+### Gaussian-Like Random Without External Dependencies
+
+Use Box-Muller transform (two uniform randoms -> one normal random). No library needed:
+
+```typescript
+function gaussianRandom(): number {
+  const u1 = Math.random();
+  const u2 = Math.random();
+  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+}
+```
+
+This returns values with mean 0, std dev 1. Multiply by spread and add to center.
+
+## MIDI Export Design
+
+### File Structure (Format 1)
+
+- **Track 0:** Tempo track (tempo meta-event, time signature 4/4)
+- **Tracks 1-N:** One per performer, each containing:
+  - Track name meta-event: "Performer {id} ({instrument})"
+  - Program change: GM instrument number (0=Piano, 12=Marimba, 89=Warm Pad for synth)
+  - Note on/off events with velocity and correct timing
+
+### Timing Conversion
+
+The scheduler runs in eighth notes. MIDI uses ticks (default 128 ticks per quarter note in MidiWriterJS). Conversion:
+
+```
+1 eighth note = 0.5 quarter notes = 64 ticks (at 128 TPQ)
+```
+
+Each event in the recording buffer needs a tick timestamp relative to performance start.
+
+### Browser Download Pattern
+
+Standard approach for browser file downloads without a server:
+
+```typescript
+const blob = new Blob([midiBytes], { type: 'audio/midi' });
+const url = URL.createObjectURL(blob);
+const a = document.createElement('a');
+a.href = url;
+a.download = filename;
+a.click();
+URL.revokeObjectURL(url);
+```
+
+MidiWriterJS provides `writer.buildFile()` which returns a `Uint8Array`, or `writer.dataUri()` for a data URI. The Blob approach is cleaner for named downloads.
+
+### Filename Convention
+
+Format: `intempo-{mode}-{bpm}bpm-{performerCount}perf-{YYYY-MM-DD}.mid`
+
+Example: `intempo-riley-120bpm-4perf-2026-02-15.mid`
+
+Uses hyphens (not spaces or underscores) for maximum cross-platform compatibility. Project name first for easy identification when sorting.
+
+## Recording Buffer Design
+
+The buffer sits between the scheduler and the export service. It passively records every note event during playback.
+
+| Field | Type | Source |
+|-------|------|--------|
+| `performerId` | number | `AgentNoteEvent.performerId` |
+| `midi` | number | `AgentNoteEvent.midi` |
+| `duration` | number | `AgentNoteEvent.duration` (in eighth notes) |
+| `velocity` | number | Computed by humanization layer |
+| `tick` | number | Scheduler beat counter (eighth notes from start) |
+
+Buffer lifecycle:
+- **Start:** Begin recording (tick counter resets to 0)
+- **Stop:** Pause recording, buffer preserved
+- **Resume:** Continue recording from current tick
+- **Reset:** Clear buffer entirely
+- **Export:** Clone buffer, convert to MIDI, trigger download
 
 ## MVP Recommendation
 
-**Phase 1 -- Audio engine with Riley's patterns (table stakes + core differentiator):**
-1. AudioContext setup with proper browser autoplay handling
-2. Riley's 53 patterns encoded as score data
-3. Single-voice playback with correct timing (Web Audio scheduling)
-4. Basic synth instruments (no samples yet)
-5. Play / stop / reset controls
-6. BPM configuration
+Build in this order due to dependencies:
 
-**Phase 2 -- Ensemble behavior (the differentiator):**
-1. Multiple simultaneous performers
-2. Performer AI (density-awareness, pattern-band enforcement, dropout/rejoin)
-3. Stereo panning per performer
-4. Per-performer status display (pattern number, playing/silent)
-5. Staggered entry and natural ending
+1. **Default 4 performers** -- Trivial constant change, ship immediately
+2. **Velocity humanization layer** -- Must exist before MIDI recording so recorded events include velocity
+   - Gaussian random utility
+   - Extend AgentPersonality with velocity fields
+   - Velocity computation function (personality + context)
+   - Wire into scheduler (pass velocity to SamplePlayer.play and VoicePool noteOn)
+3. **MIDI recording buffer** -- Passive event capture with velocity
+   - Buffer data structure
+   - Integration into scheduler tick
+   - Lifecycle management (start/stop/reset/clone)
+4. **MIDI export service** -- Buffer to file conversion
+   - MidiWriterJS integration
+   - Multi-track generation with metadata
+   - Browser download trigger
+5. **Export UI** -- Button in transport controls
+   - Export button (enabled when buffer has events)
+   - Filename generation
+   - Mid-playback export support
 
-**Phase 3 -- Visualization + Polish:**
-1. Abstract geometry visualization per performer
-2. Instrument variety (additional synths + samples)
-3. Toggleable pulse
-4. Dynamic performer add/remove during performance
-5. Volume control and audio polish (reverb, gentle compression)
-
-**Phase 4 -- Additional modes:**
-1. Generative score mode (algorithmic pattern generation in the style of In C)
-2. Euclidean rhythm mode
-3. URL-encoded shareable configurations
-
-**Defer entirely:**
-- Recording/export: adds complexity without validating core value
-- Mobile: not the target audience for v1
-- Multiplayer: unsolved hard problem, not needed for core experience
+**Defer:**
+- Audio export (WAV/MP3): Different technology entirely, not needed for this milestone
+- Real-time MIDI output: Inconsistent browser support, separate concern
+- Humanization intensity control: Bake in good defaults first
 
 ## Complexity Budget
 
-| Feature Area | Estimated Effort | Risk Level |
-|---|---|---|
-| Web Audio scheduling engine | High | Medium -- well-documented APIs but timing subtleties are real |
-| Riley's 53 patterns as data | Low | Low -- the patterns are published and well-known |
-| Performer AI behavior | High | High -- "feeling alive" is subjective; will need iteration |
-| Synth instrument design | Medium | Medium -- Tone.js or raw Web Audio both work; sound quality takes tuning |
-| Sample loading + playback | Medium | Low -- standard Web Audio pattern |
-| Abstract geometry visualization | High | Medium -- performance concerns when rendering many performers |
-| Euclidean rhythm generation | Low | Low -- Bjorklund's algorithm is simple and well-documented |
-| Generative score mode | Medium | Medium -- defining "in the style of In C" requires musical decisions |
-| Dynamic performer management | Medium | Medium -- resource lifecycle management |
+| Feature | Estimated Effort | Risk Level | Notes |
+|---------|-----------------|------------|-------|
+| Default 4 performers | Trivial | None | Single constant change |
+| Velocity humanization | Medium | Low | Algorithm is straightforward; tuning "feel" takes iteration |
+| Recording buffer | Low | Low | Simple array append on each tick |
+| MIDI export (MidiWriterJS) | Medium | Low | Library is mature; mapping InTempo events to MIDI events is mechanical |
+| Export UI button | Low | None | Single button in existing transport bar |
+| Velocity integration into audio | Medium | Medium | SamplePlayer already accepts velocity implicitly via smplr; VoicePool synth needs gain scaling from velocity |
 
 ## Sources
 
-- Training data knowledge of generative.fm (Alex Bainter's ambient generative music platform, Web Audio + Tone.js based)
-- Training data knowledge of Chrome Music Lab (Google Creative Lab, educational Web Audio experiments)
-- Training data knowledge of Tone.js (Web Audio framework, widely used in browser music apps)
-- Training data knowledge of Strudel (TidalCycles port to browser, pattern-based live coding)
-- Training data knowledge of Gibber (live coding environment with audio + visuals)
-- Training data knowledge of Orca (Hundred Rabbits, visual programming sequencer)
-- Training data knowledge of Terry Riley's "In C" performance practice and rules
-- Training data knowledge of Web Audio API capabilities and browser constraints
-
-**Confidence note:** All findings are based on training data (cutoff ~early 2025). Web search and live documentation verification were unavailable. Feature landscapes of referenced applications may have changed. Core Web Audio API capabilities and browser constraints are stable and unlikely to have shifted significantly.
+- [MidiWriterJS GitHub](https://github.com/grimmdude/MidiWriterJS) -- JavaScript MIDI file generation library, v3.1.1, supports multi-track Format 1, per-note velocity, TypeScript (MEDIUM confidence -- API details from web search, not Context7 verified)
+- [MidiWriterJS npm](https://www.npmjs.com/package/midi-writer-js) -- ~1,500 weekly downloads, actively maintained (MEDIUM confidence)
+- [Standard MIDI File Format spec](https://midimusic.github.io/tech/midispec.html) -- Format 1 structure, tempo track conventions, meta-events (HIGH confidence -- official spec)
+- [Production Music Live - 6 Ways to Humanize Your Tracks](https://www.productionmusiclive.com/blogs/news/6-ways-to-humanize-your-tracks) -- Velocity randomization at 10-20% range (MEDIUM confidence)
+- [Music Sequencing - Humanize MIDI](https://www.musicsequencing.com/article/humanize-midi/) -- Humanization approaches and velocity range recommendations (MEDIUM confidence)
+- [Ableton - Understanding MIDI Files](https://help.ableton.com/hc/en-us/articles/209068169-Understanding-MIDI-files) -- Track naming and Format 1 expectations for DAW import (HIGH confidence -- official docs)
+- [Best Practices for Sharing MIDI Files Between DAWs](https://www.macprovideo.com/article/fl-studio/best-practices-for-sharing-midi-files-between-daws) -- File naming, instrument mapping, compatibility (MEDIUM confidence)
+- InTempo codebase review: `src/audio/scheduler.ts`, `src/score/ensemble.ts`, `src/audio/engine.ts`, `src/audio/types.ts` (HIGH confidence -- direct code reading)
