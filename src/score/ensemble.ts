@@ -9,10 +9,11 @@
  * - Band enforcement: no performer more than 3 patterns ahead of lowest active
  * - Dropout/rejoin: agents go silent then return, creating natural breathing
  * - Unison seeking: agents cluster on the same pattern periodically
- * - Endgame: staggered dropouts when performers reach pattern 53
+ * - Endgame: staggered dropouts when performers reach the final pattern
  */
 
 import type { Pattern, ScoreNote } from '../audio/types.ts';
+import type { ScoreMode } from '../audio/types.ts';
 import { PATTERNS } from './patterns.ts';
 
 // ---------------------------------------------------------------------------
@@ -498,8 +499,10 @@ export class Ensemble {
   private _patterns: Pattern[];
   private finalPatternIndex: number;
   private bandWidth: number;
+  private _scoreMode: ScoreMode;
 
-  constructor(count: number, patterns: Pattern[] = PATTERNS) {
+  constructor(count: number, patterns: Pattern[] = PATTERNS, mode: ScoreMode = 'riley') {
+    this._scoreMode = mode;
     this._patterns = patterns;
     this.finalPatternIndex = patterns.length - 1;
     this.bandWidth = Math.max(2, Math.min(5, Math.round(patterns.length * 0.06)));
@@ -579,8 +582,8 @@ export class Ensemble {
     return this._patterns.length;
   }
 
-  get scoreMode(): 'riley' | 'generative' | 'euclidean' {
-    return 'riley'; // Default for now; will be set by mode switching in Plan 03
+  get scoreMode(): ScoreMode {
+    return this._scoreMode;
   }
 
   get performerStates() {

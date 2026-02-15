@@ -34,7 +34,7 @@ export class AudioEngine {
     this.audioContext = new AudioContext();
     await this.audioContext.audioWorklet.addModule('/synth-processor.js');
 
-    this.ensemble = new Ensemble(this.performerCount, this.currentPatterns);
+    this.ensemble = new Ensemble(this.performerCount, this.currentPatterns, this.currentMode);
     this.voicePool = new VoicePool(this.audioContext, this.performerCount * 2);
     this.scheduler = new Scheduler(this.audioContext, this.voicePool, this.ensemble);
 
@@ -108,7 +108,7 @@ export class AudioEngine {
       const callback = this.scheduler?.onStateChange ?? this.pendingOnStateChange;
 
       // Rebuild ensemble and scheduler with new patterns
-      this.ensemble = new Ensemble(this.performerCount, this.currentPatterns);
+      this.ensemble = new Ensemble(this.performerCount, this.currentPatterns, mode);
       this.scheduler = new Scheduler(this.audioContext!, this.voicePool!, this.ensemble);
 
       // Reconnect callback

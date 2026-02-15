@@ -4,7 +4,7 @@ export interface ScoreNote {
 }
 
 export interface Pattern {
-  id: number;       // 1-53
+  id: number;       // 1-based pattern ID
   notes: ScoreNote[];
 }
 
