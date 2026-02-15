@@ -83,6 +83,8 @@ export class AudioEngine {
       bpm: 120,
       performers: [],
       ensembleComplete: false,
+      totalPatterns: 53,
+      scoreMode: 'riley' as const,
     };
   }
 

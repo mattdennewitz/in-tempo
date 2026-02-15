@@ -52,6 +52,7 @@ export interface AgentState {
   patternIndex: number;
   noteIndex: number;
   repetitionsRemaining: number;
+  totalRepetitions: number;
   status: 'playing' | 'silent' | 'complete';
   beatsSilent: number;
   beatsSinceLastDropout: number;
@@ -61,13 +62,6 @@ export interface AgentState {
 }
 
 type Decision = 'advance' | 'repeat' | 'dropout';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const BAND_WIDTH = 3;
-const FINAL_PATTERN_INDEX = 52; // 0-based index of pattern 53
 
 // ---------------------------------------------------------------------------
 // Utility: Weighted random choice
@@ -163,23 +157,24 @@ export function computeWeights(
 export function enforceBand(
   agent: AgentState,
   decision: Decision,
-  snapshot: EnsembleSnapshot
+  snapshot: EnsembleSnapshot,
+  bandWidth: number = 3
 ): { decision: Decision; jumpTo?: number } {
   const playing = snapshot.performers.filter(p => p.status === 'playing');
   if (playing.length <= 1) {
     return { decision };
   }
 
-  // If agent is BAND_WIDTH or more ahead and wants to advance: force repeat
+  // If agent is bandWidth or more ahead and wants to advance: force repeat
   if (
-    agent.patternIndex >= snapshot.minPatternIndex + BAND_WIDTH &&
+    agent.patternIndex >= snapshot.minPatternIndex + bandWidth &&
     decision === 'advance'
   ) {
     return { decision: 'repeat' };
   }
 
-  // If agent is BAND_WIDTH or more behind: force jump forward
-  if (agent.patternIndex <= snapshot.maxPatternIndex - BAND_WIDTH) {
+  // If agent is bandWidth or more behind: force jump forward
+  if (agent.patternIndex <= snapshot.maxPatternIndex - bandWidth) {
     const jumpTarget = snapshot.maxPatternIndex - 1;
     return { decision: 'advance', jumpTo: Math.max(jumpTarget, agent.patternIndex) };
   }
@@ -213,14 +208,26 @@ export function generatePersonality(): AgentPersonality {
 export class PerformerAgent {
   private _state: AgentState;
   private patterns: Pattern[];
+  private finalPatternIndex: number;
+  private bandWidth: number;
 
-  constructor(id: number, patterns: Pattern[], personality?: AgentPersonality) {
+  constructor(
+    id: number,
+    patterns: Pattern[],
+    personality?: AgentPersonality,
+    finalPatternIndex?: number,
+    bandWidth?: number
+  ) {
     this.patterns = patterns;
+    this.finalPatternIndex = finalPatternIndex ?? patterns.length - 1;
+    this.bandWidth = bandWidth ?? 3;
+    const reps = this.randomReps();
     this._state = {
       id,
       patternIndex: 0,
       noteIndex: 0,
-      repetitionsRemaining: this.randomReps(),
+      repetitionsRemaining: reps,
+      totalRepetitions: reps,
       status: 'playing',
       beatsSilent: 0,
       beatsSinceLastDropout: 100, // start high so dropout is possible early
@@ -232,6 +239,12 @@ export class PerformerAgent {
 
   private randomReps(): number {
     return Math.floor(Math.random() * 7) + 2; // 2-8
+  }
+
+  private setNewReps(): void {
+    const reps = this.randomReps();
+    this._state.totalRepetitions = reps;
+    this._state.repetitionsRemaining = reps;
   }
 
   tick(snapshot: EnsembleSnapshot): AgentNoteEvent | null {
@@ -309,7 +322,7 @@ export class PerformerAgent {
     const s = this._state;
 
     // Endgame: on final pattern, never advance
-    if (s.patternIndex >= FINAL_PATTERN_INDEX) {
+    if (s.patternIndex >= this.finalPatternIndex) {
       this.handleEndgame(snapshot);
       return;
     }
@@ -323,7 +336,7 @@ export class PerformerAgent {
     ]);
 
     // Band enforcement (hard override)
-    const enforced = enforceBand(s, decision, snapshot);
+    const enforced = enforceBand(s, decision, snapshot, this.bandWidth);
     decision = enforced.decision;
 
     // Execute decision
@@ -334,11 +347,11 @@ export class PerformerAgent {
         } else {
           s.patternIndex++;
         }
-        s.repetitionsRemaining = this.randomReps();
+        this.setNewReps();
         s.noteIndex = 0;
         break;
       case 'repeat':
-        s.repetitionsRemaining = this.randomReps();
+        this.setNewReps();
         break;
       case 'dropout':
         // Suppress dropout if it would violate minimum active floor
@@ -348,7 +361,7 @@ export class PerformerAgent {
           s.beatsSinceLastDropout = 0;
         } else {
           // Fallback to repeat
-          s.repetitionsRemaining = this.randomReps();
+          this.setNewReps();
         }
         break;
     }
@@ -359,7 +372,7 @@ export class PerformerAgent {
 
     // Count performers at final pattern
     const atEnd = snapshot.performers.filter(
-      p => p.patternIndex >= FINAL_PATTERN_INDEX
+      p => p.patternIndex >= this.finalPatternIndex
     ).length;
     const fractionAtEnd = atEnd / snapshot.totalPerformers;
 
@@ -373,7 +386,7 @@ export class PerformerAgent {
     }
 
     // Default: keep repeating final pattern
-    s.repetitionsRemaining = this.randomReps();
+    this.setNewReps();
   }
 
   private rejoinLogic(snapshot: EnsembleSnapshot): void {
@@ -416,17 +429,17 @@ export class PerformerAgent {
     s.noteIndex = 0;
 
     // Advance to the next pattern on rejoin
-    if (s.patternIndex < FINAL_PATTERN_INDEX) {
+    if (s.patternIndex < this.finalPatternIndex) {
       s.patternIndex++;
     }
 
-    s.repetitionsRemaining = this.randomReps();
+    this.setNewReps();
 
     // Jump forward if too far behind the band
     const playing = snapshot.performers.filter(p => p.status === 'playing');
     if (playing.length > 0) {
       const max = snapshot.maxPatternIndex;
-      if (s.patternIndex < max - BAND_WIDTH) {
+      if (s.patternIndex < max - this.bandWidth) {
         s.patternIndex = max - 1;
       }
     }
@@ -467,7 +480,7 @@ export class PerformerAgent {
   reset(): void {
     this._state.patternIndex = 0;
     this._state.noteIndex = 0;
-    this._state.repetitionsRemaining = this.randomReps();
+    this.setNewReps();
     this._state.status = 'playing';
     this._state.beatsSilent = 0;
     this._state.beatsSinceLastDropout = 100;
@@ -483,14 +496,20 @@ export class PerformerAgent {
 export class Ensemble {
   private agents: PerformerAgent[];
   private _patterns: Pattern[];
+  private finalPatternIndex: number;
+  private bandWidth: number;
 
   constructor(count: number, patterns: Pattern[] = PATTERNS) {
     this._patterns = patterns;
+    this.finalPatternIndex = patterns.length - 1;
+    this.bandWidth = Math.max(2, Math.min(5, Math.round(patterns.length * 0.06)));
     this.agents = [];
 
     let cumulativeDelay = 0;
     for (let i = 0; i < count; i++) {
-      const agent = new PerformerAgent(i, patterns);
+      const agent = new PerformerAgent(
+        i, patterns, undefined, this.finalPatternIndex, this.bandWidth
+      );
       agent._mutableState.entryDelay = cumulativeDelay;
       cumulativeDelay += Math.floor(Math.random() * 3) + 2; // 2-4 beats
       this.agents.push(agent);
@@ -556,14 +575,25 @@ export class Ensemble {
     return this.agents.every(a => a.isComplete);
   }
 
+  get totalPatterns(): number {
+    return this._patterns.length;
+  }
+
+  get scoreMode(): 'riley' | 'generative' | 'euclidean' {
+    return 'riley'; // Default for now; will be set by mode switching in Plan 03
+  }
+
   get performerStates() {
     return this.agents.map(a => {
       const s = a.state;
+      const isActive = s.status === 'playing';
       return {
         id: s.id,
         patternIndex: s.patternIndex,
         currentPattern: Math.min(s.patternIndex + 1, this._patterns.length),
         status: s.status,
+        currentRep: isActive ? s.totalRepetitions - s.repetitionsRemaining + 1 : 0,
+        totalReps: isActive ? s.totalRepetitions : 0,
       };
     });
   }

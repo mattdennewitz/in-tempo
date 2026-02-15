@@ -8,6 +8,8 @@ export interface Pattern {
   notes: ScoreNote[];
 }
 
+export type ScoreMode = 'riley' | 'generative' | 'euclidean';
+
 export interface EngineState {
   playing: boolean;
   currentPattern: number;
@@ -21,6 +23,8 @@ export interface PerformerState {
   patternIndex: number;    // 0-based
   currentPattern: number;  // 1-based (for display)
   status: 'playing' | 'silent' | 'complete';
+  currentRep: number;      // 1-based current repetition (0 when silent/complete)
+  totalReps: number;       // total repetitions for current pattern (0 when silent/complete)
 }
 
 export interface EnsembleEngineState {
@@ -28,4 +32,6 @@ export interface EnsembleEngineState {
   bpm: number;
   performers: PerformerState[];
   ensembleComplete: boolean;
+  totalPatterns: number;
+  scoreMode: ScoreMode;
 }

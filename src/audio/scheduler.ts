@@ -85,6 +85,8 @@ export class Scheduler {
       bpm: this._bpm,
       performers: this.ensemble.performerStates,
       ensembleComplete: this.ensemble.isComplete,
+      totalPatterns: this.ensemble.totalPatterns,
+      scoreMode: this.ensemble.scoreMode,
     };
   }
 
