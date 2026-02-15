@@ -19,13 +19,17 @@ import { SeededRng } from './rng.ts';
 import {
   computeVelocity,
   generateVelocityPersonality,
+  intensityScale,
   type VelocityConfig,
   type VelocityContext,
 } from './velocity.ts';
 import {
   computeTimingOffset,
+  computeRubatoMultiplier,
+  advanceRubato,
   generateTimingPersonality,
   type TimingContext,
+  type RubatoState,
 } from './timing.ts';
 
 // ---------------------------------------------------------------------------
@@ -574,6 +578,8 @@ export class Ensemble {
   private pendingRemovals: Set<number> = new Set();
   private velocityConfig: VelocityConfig;
   private rng: SeededRng;
+  private rubatoState: RubatoState;
+  private _lastRubatoMultiplier: number = 1.0;
 
   constructor(
     count: number,
@@ -590,6 +596,7 @@ export class Ensemble {
     this.nextId = count;
     this.velocityConfig = velocityConfig;
     this.rng = rng ?? new SeededRng(Date.now() & 0xffffffff);
+    this.rubatoState = { phase: 0, period: this.rng.int(16, 32) };
 
     // INVARIANT: Agents are created and tick in array order. This guarantees
     // the PRNG call sequence is deterministic for a given seed + performer count.
@@ -624,6 +631,14 @@ export class Ensemble {
         events.push(event);
       }
     }
+
+    // Compute rubato multiplier for this tick, then advance phase
+    this._lastRubatoMultiplier = computeRubatoMultiplier(
+      this.rubatoState,
+      intensityScale(this.velocityConfig.intensity) * (this.velocityConfig.enabled ? 1.0 : 0.0),
+    );
+    this.rubatoState = advanceRubato(this.rubatoState);
+
     return events;
   }
 
@@ -704,6 +719,10 @@ export class Ensemble {
     return this.agents.length;
   }
 
+  get rubatoMultiplier(): number {
+    return this._lastRubatoMultiplier;
+  }
+
   get isComplete(): boolean {
     return this.agents.every(a => a.isComplete);
   }
@@ -740,6 +759,8 @@ export class Ensemble {
   reset(): void {
     this.pendingRemovals.clear();
     this.nextId = this.agents.length;
+    this.rubatoState = { phase: 0, period: this.rubatoState.period };
+    this._lastRubatoMultiplier = 1.0;
     for (const agent of this.agents) {
       agent.reset();
     }
