@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-14)
 ## Current Position
 
 Phase: 4 of 4 (Composition Modes)
-Plan: 1 of 3 in current phase -- COMPLETE
+Plan: 2 of 3 in current phase -- COMPLETE
 Status: In Progress
-Last activity: 2026-02-15 -- Completed 04-01-PLAN.md
+Last activity: 2026-02-15 -- Completed 04-02-PLAN.md
 
-Progress: [################--] 86%
+Progress: [#################-] 93%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
+- Total plans completed: 7
 - Average duration: 4min
-- Total execution time: 0.44 hours
+- Total execution time: 0.47 hours
 
 **By Phase:**
 
@@ -29,10 +29,10 @@ Progress: [################--] 86%
 |-------|-------|-------|----------|
 | 01-audio-engine-score-foundation | 3/3 | 16min | 5min |
 | 02-ensemble-ai | 2/2 | 5min | 2.5min |
-| 04-composition-modes | 1/3 | 4min | 4min |
+| 04-composition-modes | 2/3 | 6min | 3min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (2min), 01-03 (10min), 02-01 (3min), 02-02 (2min), 04-01 (4min)
+- Last 5 plans: 01-03 (10min), 02-01 (3min), 02-02 (2min), 04-01 (4min), 04-02 (2min)
 - Trend: Fast
 
 *Updated after each plan completion*
@@ -68,6 +68,10 @@ Recent decisions affecting current work:
 - [04-01]: enforceBand accepts bandWidth as parameter with default=3 for backward compatibility
 - [04-01]: Ensemble.scoreMode getter returns 'riley' as default -- mode switching deferred to Plan 03
 - [04-01]: Generative motif bank: 2-4 note fragments stored from 30% of patterns, reused via transpose/invert/retrograde
+- [04-02]: C-major pentatonic (C D E G A) for Euclidean mode -- distinguishes from generative's full diatonic
+- [04-02]: setScoreMode() preserves onStateChange callback across scheduler rebuild
+- [04-02]: No auto-restart after mode switch -- user must click Start
+- [04-02]: Interlocking complementary pairs via rhythm inversion at ~30% probability
 
 ### Pending Todos
 
@@ -81,7 +85,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 04-01-PLAN.md (Dynamic ensemble + generative pattern factory)
+Stopped at: Completed 04-02-PLAN.md (Euclidean patterns + engine mode switching)
 Resume file: None
 
-**Phase 4 in progress** - Dynamic ensemble accepting any-length patterns. Generative factory complete. Next: euclidean patterns (04-02).
+**Phase 4 in progress** - All three score modes wired and producing valid patterns. Mode switching API complete. Next: UI composition selector (04-03).
