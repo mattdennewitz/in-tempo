@@ -11,6 +11,23 @@
 /* Pattern display */
 .pattern-display {
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Mode badge */
+.mode-badge {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #888;
+  background: #f0f0f0;
+  border-radius: 999px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .pattern-text {
@@ -43,11 +60,19 @@
 .performer-id {
   color: #888;
   font-weight: 500;
-  min-width: 1.8em;
+  min-width: 4.5em;
 }
 
 .performer-pattern {
   color: #213547;
+  min-width: 1.8em;
+}
+
+.performer-rep {
+  color: #aaa;
+  font-size: 0.78rem;
+  min-width: 2.5em;
+  text-align: right;
 }
 
 .performer-status--playing {

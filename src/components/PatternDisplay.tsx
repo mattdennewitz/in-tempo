@@ -1,16 +1,24 @@
-import type { PerformerState } from '../audio/types.ts';
+import type { PerformerState, ScoreMode } from '../audio/types.ts';
 
 interface PatternDisplayProps {
   performers: PerformerState[];
   playing: boolean;
   ensembleComplete: boolean;
   totalPatterns: number;
+  scoreMode: ScoreMode;
 }
 
-export function PatternDisplay({ performers, playing, ensembleComplete, totalPatterns }: PatternDisplayProps) {
+const MODE_LABELS: Record<ScoreMode, string> = {
+  riley: 'Riley',
+  generative: 'Generative',
+  euclidean: 'Euclidean',
+};
+
+export function PatternDisplay({ performers, playing, ensembleComplete, totalPatterns, scoreMode }: PatternDisplayProps) {
   if (ensembleComplete) {
     return (
       <div className="pattern-display">
+        <span className="mode-badge">{MODE_LABELS[scoreMode]}</span>
         <span className="pattern-text">Performance Complete</span>
       </div>
     );
@@ -26,12 +34,16 @@ export function PatternDisplay({ performers, playing, ensembleComplete, totalPat
 
   return (
     <div className="pattern-display">
+      <span className="mode-badge">{MODE_LABELS[scoreMode]}</span>
       <div className="performer-grid">
         {performers.map((p) => (
           <div key={p.id} className={`performer-status performer-status--${p.status}`}>
-            <span className="performer-id">P{p.id + 1}</span>
+            <span className="performer-id">Player {p.id + 1}</span>
             <span className="performer-pattern">
               {p.status === 'complete' ? 'Done' : p.status === 'silent' ? '...' : `${p.currentPattern}`}
+            </span>
+            <span className="performer-rep">
+              {p.status === 'complete' ? '' : p.status === 'silent' ? '' : `${p.currentRep}/${p.totalReps}`}
             </span>
           </div>
         ))}

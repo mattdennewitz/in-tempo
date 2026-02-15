@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { AudioEngine } from './audio/engine.ts';
-import type { PerformerState } from './audio/types.ts';
-import { TOTAL_PATTERNS } from './score/patterns.ts';
+import type { PerformerState, ScoreMode } from './audio/types.ts';
+import { ScoreModeSelector } from './components/ScoreModeSelector.tsx';
 import { Transport } from './components/Transport.tsx';
 import { BpmSlider } from './components/BpmSlider.tsx';
 import { PatternDisplay } from './components/PatternDisplay.tsx';
@@ -14,6 +14,8 @@ function App() {
   const [performers, setPerformers] = useState<PerformerState[]>([]);
   const [ensembleComplete, setEnsembleComplete] = useState(false);
   const [bpm, setBpm] = useState(120);
+  const [scoreMode, setScoreMode] = useState<ScoreMode>('riley');
+  const [totalPatterns, setTotalPatterns] = useState(53);
 
   useEffect(() => {
     const engine = engineRef.current;
@@ -22,6 +24,8 @@ function App() {
       setPerformers(state.performers);
       setEnsembleComplete(state.ensembleComplete);
       setBpm(state.bpm);
+      setScoreMode(state.scoreMode);
+      setTotalPatterns(state.totalPatterns);
     };
     return () => {
       engine.dispose();
@@ -44,13 +48,22 @@ function App() {
     engineRef.current.setBpm(newBpm);
   }, []);
 
+  const handleModeChange = useCallback((mode: ScoreMode) => {
+    engineRef.current.setScoreMode(mode);
+  }, []);
+
   return (
     <div className="app">
+      <ScoreModeSelector
+        currentMode={scoreMode}
+        onChange={handleModeChange}
+      />
       <PatternDisplay
         performers={performers}
         playing={playing}
         ensembleComplete={ensembleComplete}
-        totalPatterns={TOTAL_PATTERNS}
+        totalPatterns={totalPatterns}
+        scoreMode={scoreMode}
       />
       <Transport
         playing={playing}
