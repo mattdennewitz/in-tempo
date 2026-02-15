@@ -5,7 +5,7 @@
  * chorused tone suitable for Terry Riley's "In C" patterns.
  *
  * Messages:
- *   { type: 'noteOn', frequency: number }  - Start playing at frequency
+ *   { type: 'noteOn', frequency: number, time?: number }  - Start playing at frequency (at scheduled AudioContext time)
  *   { type: 'noteOff' }                    - Release (envelope decays)
  *   { type: 'stop' }                       - Immediate silence
  */
@@ -35,16 +35,24 @@ class SynthProcessor extends AudioWorkletProcessor {
     // Max output gain to avoid clipping
     this.maxGain = 0.3;
 
+    // Pending scheduled noteOn (deferred until currentTime >= startTime)
+    this.pendingNoteOn = null; // { frequency, startTime } or null
+
     this.port.onmessage = (e) => {
       const data = e.data;
       if (data.type === 'noteOn') {
-        this.frequency = data.frequency;
-        this.targetEnvelope = 1.0;
-        this.playing = true;
-        this.stopping = false;
-        // Reset phases to avoid discontinuity on frequency change
-        this.phase1 = 0;
-        this.phase2 = 0;
+        if (data.time != null) {
+          // Schedule for future: store pending, will activate in process()
+          this.pendingNoteOn = { frequency: data.frequency, startTime: data.time };
+        } else {
+          // Immediate (legacy / no time specified)
+          this.frequency = data.frequency;
+          this.targetEnvelope = 1.0;
+          this.playing = true;
+          this.stopping = false;
+          this.phase1 = 0;
+          this.phase2 = 0;
+        }
       } else if (data.type === 'noteOff') {
         this.playing = false;
         this.targetEnvelope = 0;
@@ -62,6 +70,20 @@ class SynthProcessor extends AudioWorkletProcessor {
 
     if (!channel0) {
       return true;
+    }
+
+    // Check if a scheduled noteOn should activate
+    if (this.pendingNoteOn) {
+      const blockEndTime = currentTime + channel0.length / sampleRate;
+      if (blockEndTime >= this.pendingNoteOn.startTime) {
+        this.frequency = this.pendingNoteOn.frequency;
+        this.targetEnvelope = 1.0;
+        this.playing = true;
+        this.stopping = false;
+        this.phase1 = 0;
+        this.phase2 = 0;
+        this.pendingNoteOn = null;
+      }
     }
 
     const twoPi = 2 * Math.PI;

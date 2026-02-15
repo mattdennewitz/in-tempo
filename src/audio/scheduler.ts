@@ -167,7 +167,7 @@ export class Scheduler {
           this.releaseTimers.delete(voice.index);
         }
 
-        voice.node.port.postMessage({ type: 'noteOn', frequency });
+        voice.node.port.postMessage({ type: 'noteOn', frequency, time });
 
         // Schedule release after event.duration eighth notes
         const noteEndTime = time + noteDurationSeconds;

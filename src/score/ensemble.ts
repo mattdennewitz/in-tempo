@@ -492,11 +492,8 @@ export class Ensemble {
     this.agents = [];
     this.nextId = count;
 
-    let cumulativeDelay = 0;
     for (let i = 0; i < count; i++) {
       const agent = new PerformerAgent(i, patterns);
-      agent._mutableState.entryDelay = cumulativeDelay;
-      cumulativeDelay += Math.floor(Math.random() * 3) + 2; // 2-4 beats
       this.agents.push(agent);
     }
   }
@@ -618,11 +615,8 @@ export class Ensemble {
   reset(): void {
     this.pendingRemovals.clear();
     this.nextId = this.agents.length;
-    let cumulativeDelay = 0;
     for (const agent of this.agents) {
       agent.reset();
-      agent._mutableState.entryDelay = cumulativeDelay;
-      cumulativeDelay += Math.floor(Math.random() * 3) + 2;
     }
   }
 }
