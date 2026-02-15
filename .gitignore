@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Chunkhound
+.chunkhound.json
+.chunkhound/
