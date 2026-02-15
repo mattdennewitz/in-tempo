@@ -11,6 +11,8 @@ import { VoicePool } from './voice-pool.ts';
 import { Scheduler } from './scheduler.ts';
 import { SamplePlayer } from './sampler.ts';
 import { PulseGenerator } from './pulse.ts';
+import { MidiRecorder } from './midi-recorder.ts';
+import { exportToMidi, downloadMidi } from './midi-exporter.ts';
 import { Ensemble } from '../score/ensemble.ts';
 import { PATTERNS } from '../score/patterns.ts';
 import { getPatternsForMode } from '../score/score-modes.ts';
@@ -28,6 +30,7 @@ export class AudioEngine {
   private currentMode: ScoreMode = 'riley';
   private currentPatterns: Pattern[] = PATTERNS;
   private velocityConfig: VelocityConfig = { enabled: true, intensity: 'moderate' };
+  private midiRecorder: MidiRecorder = new MidiRecorder();
 
   /**
    * Initialize the audio subsystem: create AudioContext, load worklet module,
@@ -57,6 +60,7 @@ export class AudioEngine {
       this.pulseGenerator,
     );
     this.scheduler.velocityConfigRef = { current: this.velocityConfig };
+    this.scheduler.midiRecorder = this.midiRecorder;
 
     // Apply any callback that was set before initialization
     if (this.pendingOnStateChange) {
@@ -92,6 +96,7 @@ export class AudioEngine {
   /** Stop playback, silence all voices, and reset ensemble to initial state. */
   reset(): void {
     this.scheduler?.reset();
+    this.midiRecorder.clear();
   }
 
   /** Set BPM (clamped to 100-180). Takes effect on next beat. */
@@ -143,6 +148,7 @@ export class AudioEngine {
         this.pulseGenerator!,
       );
       this.scheduler.velocityConfigRef = { current: this.velocityConfig };
+      this.scheduler.midiRecorder = this.midiRecorder;
       if (callback) {
         this.scheduler.onStateChange = callback;
       }
@@ -153,6 +159,23 @@ export class AudioEngine {
   /** Toggle the eighth-note high C pulse. Returns new enabled state. */
   togglePulse(): boolean {
     return this.scheduler?.togglePulse() ?? false;
+  }
+
+  /** Export recorded events as a MIDI file and trigger browser download. */
+  exportMidi(): void {
+    const events = this.midiRecorder.getEvents();
+    if (events.length === 0) return;
+
+    const bpm = this.scheduler?.getState().bpm ?? 120;
+    const data = exportToMidi(events, bpm);
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+    const filename = `intempo-${this.currentMode}-${bpm}bpm-${timestamp}.mid`;
+    downloadMidi(data, filename);
+  }
+
+  /** Whether any note events have been recorded (for UI enable/disable). */
+  get hasRecording(): boolean {
+    return this.midiRecorder.eventCount > 0;
   }
 
   /** Enable or disable velocity humanization. */
@@ -188,6 +211,7 @@ export class AudioEngine {
       performerCount: this.initialPerformerCount,
       humanizationEnabled: this.velocityConfig.enabled,
       humanizationIntensity: this.velocityConfig.intensity,
+      hasRecording: false,
     };
   }
 
@@ -217,6 +241,7 @@ export class AudioEngine {
         this.pulseGenerator!,
       );
       this.scheduler.velocityConfigRef = { current: this.velocityConfig };
+      this.scheduler.midiRecorder = this.midiRecorder;
 
       // Reconnect callback and fire state change
       if (callback) {
@@ -251,6 +276,7 @@ export class AudioEngine {
   /** Clean up all resources: stop playback, dispose voices, close context. */
   dispose(): void {
     this.scheduler?.reset();
+    this.midiRecorder.clear();
     this.voicePool?.dispose();
     this.samplePlayer?.dispose();
     this.pulseGenerator?.dispose();

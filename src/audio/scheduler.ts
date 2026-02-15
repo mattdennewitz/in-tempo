@@ -15,6 +15,7 @@ import type { VoicePool } from './voice-pool.ts';
 import type { Ensemble } from '../score/ensemble.ts';
 import type { SamplePlayer } from './sampler.ts';
 import type { PulseGenerator } from './pulse.ts';
+import type { MidiRecorder } from './midi-recorder.ts';
 import { assignInstrument } from './sampler.ts';
 import { midiToFrequency } from '../score/patterns.ts';
 
@@ -33,9 +34,11 @@ export class Scheduler {
   private _playing: boolean = false;
   private timerId: ReturnType<typeof setTimeout> | null = null;
   private releaseTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
+  private beatCounter: number = 0;
 
   onStateChange: ((state: EnsembleEngineState) => void) | null = null;
   velocityConfigRef: { current: VelocityConfig } = { current: { enabled: true, intensity: 'moderate' } };
+  midiRecorder: MidiRecorder | null = null;
 
   constructor(
     audioContext: AudioContext,
@@ -54,6 +57,8 @@ export class Scheduler {
   /** Start the scheduling loop. */
   start(): void {
     this.nextNoteTime = this.audioContext.currentTime;
+    this.beatCounter = 0;
+    this.midiRecorder?.start();
     this._playing = true;
     this.tick();
     this.fireStateChange();
@@ -69,6 +74,7 @@ export class Scheduler {
       clearTimeout(this.timerId);
       this.timerId = null;
     }
+    this.midiRecorder?.stop(this.beatCounter);
     this.fireStateChange();
   }
 
@@ -87,6 +93,8 @@ export class Scheduler {
     this.releaseTimers.clear();
     this.voicePool.stopAll();
     this.ensemble.reset();
+    this.midiRecorder?.clear();
+    this.beatCounter = 0;
     this._bpm = 120;
     this.fireStateChange();
   }
@@ -111,6 +119,7 @@ export class Scheduler {
       performerCount: this.ensemble.agentCount,
       humanizationEnabled: vc.enabled,
       humanizationIntensity: vc.intensity,
+      hasRecording: (this.midiRecorder?.eventCount ?? 0) > 0,
     };
   }
 
@@ -196,6 +205,17 @@ export class Scheduler {
         const smplrVelocity = Math.round(event.velocity * 127);
         this.samplePlayer.play(instrument, event.midi, time, noteDurationSeconds, smplrVelocity);
       }
+
+      // Record event for MIDI export
+      if (this.midiRecorder?.isRecording) {
+        this.midiRecorder.record(
+          this.beatCounter,
+          event.performerId,
+          event.midi,
+          event.duration,
+          event.velocity,
+        );
+      }
     }
 
     // Schedule pulse if enabled
@@ -203,6 +223,7 @@ export class Scheduler {
       this.pulseGenerator.schedulePulse(time, secondsPerEighth);
     }
 
+    this.beatCounter++;
     this.fireStateChange();
   }
 
