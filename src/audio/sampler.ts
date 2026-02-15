@@ -53,17 +53,19 @@ export class SamplePlayer {
    * @param midi - MIDI note number
    * @param time - AudioContext time to start
    * @param duration - Duration in seconds
+   * @param velocity - MIDI velocity 0-127 (default 100)
    */
   play(
     instrument: 'piano' | 'marimba',
     midi: number,
     time: number,
     duration: number,
+    velocity?: number,
   ): void {
     if (!this._isReady) return;
 
     const target = instrument === 'piano' ? this.piano! : this.marimba!;
-    target.start({ note: midi, time, duration });
+    target.start({ note: midi, time, duration, velocity: velocity ?? 100 });
   }
 
   get isReady(): boolean {

@@ -35,18 +35,22 @@ class SynthProcessor extends AudioWorkletProcessor {
     // Max output gain to avoid clipping
     this.maxGain = 0.3;
 
+    // Per-note gain (defaults to maxGain, scaled by velocity)
+    this.noteGain = this.maxGain;
+
     // Pending scheduled noteOn (deferred until currentTime >= startTime)
-    this.pendingNoteOn = null; // { frequency, startTime } or null
+    this.pendingNoteOn = null; // { frequency, startTime, gain } or null
 
     this.port.onmessage = (e) => {
       const data = e.data;
       if (data.type === 'noteOn') {
         if (data.time != null) {
           // Schedule for future: store pending, will activate in process()
-          this.pendingNoteOn = { frequency: data.frequency, startTime: data.time };
+          this.pendingNoteOn = { frequency: data.frequency, startTime: data.time, gain: data.gain ?? this.maxGain };
         } else {
           // Immediate (legacy / no time specified)
           this.frequency = data.frequency;
+          this.noteGain = data.gain ?? this.maxGain;
           this.targetEnvelope = 1.0;
           this.playing = true;
           this.stopping = false;
@@ -77,6 +81,7 @@ class SynthProcessor extends AudioWorkletProcessor {
       const blockEndTime = currentTime + channel0.length / sampleRate;
       if (blockEndTime >= this.pendingNoteOn.startTime) {
         this.frequency = this.pendingNoteOn.frequency;
+        this.noteGain = this.pendingNoteOn.gain ?? this.maxGain;
         this.targetEnvelope = 1.0;
         this.playing = true;
         this.stopping = false;
@@ -106,7 +111,7 @@ class SynthProcessor extends AudioWorkletProcessor {
         const osc2 = Math.sin(this.phase2 * twoPi);
 
         // Mix at equal level, scale to max gain
-        channel0[i] = (osc1 + osc2) * 0.5 * this.envelope * this.maxGain;
+        channel0[i] = (osc1 + osc2) * 0.5 * this.envelope * this.noteGain;
 
         // Advance phases
         this.phase1 += freq1 / sampleRate;

@@ -10,7 +10,7 @@
  * - SCHEDULE_AHEAD_TIME: 100ms lookahead window
  * - TIMER_INTERVAL: 25ms setTimeout interval (4 chances per window)
  */
-import type { EnsembleEngineState } from './types.ts';
+import type { EnsembleEngineState, VelocityConfig } from './types.ts';
 import type { VoicePool } from './voice-pool.ts';
 import type { Ensemble } from '../score/ensemble.ts';
 import type { SamplePlayer } from './sampler.ts';
@@ -35,6 +35,7 @@ export class Scheduler {
   private releaseTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
 
   onStateChange: ((state: EnsembleEngineState) => void) | null = null;
+  velocityConfigRef: { current: VelocityConfig } = { current: { enabled: true, intensity: 'moderate' } };
 
   constructor(
     audioContext: AudioContext,
@@ -98,6 +99,7 @@ export class Scheduler {
 
   /** Get current ensemble engine state. */
   getState(): EnsembleEngineState {
+    const vc = this.velocityConfigRef.current;
     return {
       playing: this._playing,
       bpm: this._bpm,
@@ -107,6 +109,8 @@ export class Scheduler {
       scoreMode: this.ensemble.scoreMode,
       pulseEnabled: this.pulseGenerator.enabled,
       performerCount: this.ensemble.agentCount,
+      humanizationEnabled: vc.enabled,
+      humanizationIntensity: vc.intensity,
     };
   }
 
@@ -174,7 +178,7 @@ export class Scheduler {
           this.releaseTimers.delete(voice.index);
         }
 
-        voice.node.port.postMessage({ type: 'noteOn', frequency, time });
+        voice.node.port.postMessage({ type: 'noteOn', frequency, time, gain: event.velocity * 0.3 });
 
         // Schedule release after event.duration eighth notes
         const noteEndTime = time + noteDurationSeconds;
@@ -189,7 +193,8 @@ export class Scheduler {
         this.releaseTimers.set(voice.index, releaseTimer);
       } else {
         // Route through SamplePlayer (smplr piano/marimba)
-        this.samplePlayer.play(instrument, event.midi, time, noteDurationSeconds);
+        const smplrVelocity = Math.round(event.velocity * 127);
+        this.samplePlayer.play(instrument, event.midi, time, noteDurationSeconds, smplrVelocity);
       }
     }
 

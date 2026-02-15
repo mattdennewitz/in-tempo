@@ -6,7 +6,7 @@
  *
  * Completely framework-agnostic: no React imports, no DOM access.
  */
-import type { EnsembleEngineState, ScoreMode, Pattern } from './types.ts';
+import type { EnsembleEngineState, ScoreMode, Pattern, VelocityConfig } from './types.ts';
 import { VoicePool } from './voice-pool.ts';
 import { Scheduler } from './scheduler.ts';
 import { SamplePlayer } from './sampler.ts';
@@ -24,9 +24,10 @@ export class AudioEngine {
   private pulseGenerator: PulseGenerator | null = null;
   private initialized: boolean = false;
   private pendingOnStateChange: ((state: EnsembleEngineState) => void) | null = null;
-  private initialPerformerCount = 8;
+  private initialPerformerCount = 4;
   private currentMode: ScoreMode = 'riley';
   private currentPatterns: Pattern[] = PATTERNS;
+  private velocityConfig: VelocityConfig = { enabled: true, intensity: 'moderate' };
 
   /**
    * Initialize the audio subsystem: create AudioContext, load worklet module,
@@ -38,7 +39,7 @@ export class AudioEngine {
     this.audioContext = new AudioContext();
     await this.audioContext.audioWorklet.addModule('/synth-processor.js');
 
-    this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode);
+    this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode, this.velocityConfig);
     this.voicePool = new VoicePool(this.audioContext, this.initialPerformerCount * 2);
 
     // Initialize sampled instruments (loads from CDN)
@@ -55,6 +56,7 @@ export class AudioEngine {
       this.samplePlayer,
       this.pulseGenerator,
     );
+    this.scheduler.velocityConfigRef = { current: this.velocityConfig };
 
     // Apply any callback that was set before initialization
     if (this.pendingOnStateChange) {
@@ -134,6 +136,26 @@ export class AudioEngine {
     return this.scheduler?.togglePulse() ?? false;
   }
 
+  /** Enable or disable velocity humanization. */
+  setHumanization(enabled: boolean): void {
+    this.velocityConfig = { ...this.velocityConfig, enabled };
+    this.ensemble?.setVelocityConfig(this.velocityConfig);
+    if (this.scheduler) {
+      this.scheduler.velocityConfigRef = { current: this.velocityConfig };
+      this.scheduler.fireStateChange();
+    }
+  }
+
+  /** Set humanization intensity level. */
+  setHumanizationIntensity(intensity: 'subtle' | 'moderate' | 'expressive'): void {
+    this.velocityConfig = { ...this.velocityConfig, intensity };
+    this.ensemble?.setVelocityConfig(this.velocityConfig);
+    if (this.scheduler) {
+      this.scheduler.velocityConfigRef = { current: this.velocityConfig };
+      this.scheduler.fireStateChange();
+    }
+  }
+
   /** Get current ensemble engine state. */
   getState(): EnsembleEngineState {
     return this.scheduler?.getState() ?? {
@@ -145,6 +167,8 @@ export class AudioEngine {
       scoreMode: this.currentMode,
       pulseEnabled: false,
       performerCount: this.initialPerformerCount,
+      humanizationEnabled: this.velocityConfig.enabled,
+      humanizationIntensity: this.velocityConfig.intensity,
     };
   }
 
@@ -165,7 +189,7 @@ export class AudioEngine {
       this.voicePool?.stopAll();
 
       // Rebuild ensemble and scheduler with new patterns
-      this.ensemble = new Ensemble(this.performerCount, this.currentPatterns, mode);
+      this.ensemble = new Ensemble(this.performerCount, this.currentPatterns, mode, this.velocityConfig);
       this.scheduler = new Scheduler(
         this.audioContext!,
         this.voicePool!,
@@ -173,6 +197,7 @@ export class AudioEngine {
         this.samplePlayer!,
         this.pulseGenerator!,
       );
+      this.scheduler.velocityConfigRef = { current: this.velocityConfig };
 
       // Reconnect callback and fire state change
       if (callback) {

@@ -16,7 +16,9 @@ const INITIAL_STATE: EnsembleEngineState = {
   totalPatterns: 53,
   scoreMode: 'riley',
   pulseEnabled: false,
-  performerCount: 8,
+  performerCount: 4,
+  humanizationEnabled: true,
+  humanizationIntensity: 'moderate',
 };
 
 function App() {
