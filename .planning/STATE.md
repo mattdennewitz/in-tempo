@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Ensemble behavior must feel alive -- performers making believable musical decisions over a precisely timed audio engine, so each performance is unique and compelling.
-**Current focus:** Phase 8 in progress -- Microtiming (per-note timing offsets for humanized feel)
+**Current focus:** Phase 8 complete -- Microtiming fully wired (timing offsets + rubato in scheduler)
 
 ## Current Position
 
-Phase: 8 of 10 (Microtiming)
-Plan: 1 of 2 in current phase (done)
-Status: In progress
-Last activity: 2026-02-15 -- Completed 08-01 (Pure timing offset computation module)
+Phase: 8 of 10 (Microtiming) -- COMPLETE
+Plan: 2 of 2 in current phase (done)
+Status: Phase 8 complete
+Last activity: 2026-02-15 -- Completed 08-02 (Scheduler integration -- timing offsets and rubato)
 
-Progress: [████████████████░░░░] 80% (17/17 plans complete through 08-01)
+Progress: [████████████████████] 85% (18/18 plans complete through 08-02)
 
 ## Performance Metrics
 
@@ -30,7 +30,7 @@ Progress: [████████████████░░░░] 80% (17
 | 1-4 (v1.0) | 11 | -- | -- |
 | 5-6 (v1.1) | 5 | -- | -- |
 | 7 (v1.2) | 3 | 10min | 3min |
-| 8 (v1.2) | 1 | 4min | 4min |
+| 8 (v1.2) | 2 | 6min | 3min |
 
 **Recent Trend:**
 - Last 5 plans: --
@@ -45,6 +45,8 @@ Progress: [████████████████░░░░] 80% (17
 All decisions logged in PROJECT.md Key Decisions table.
 
 Recent decisions affecting current work:
+- 08-02: Rubato getter (Option A) instead of tick() return type change
+- 08-02: Rubato period preserved across reset (personality of the performance)
 - 08-01: Per-agent tickCount for beat index (not passed through tick() signature)
 - 08-01: Ensemble.tick(bpm) optional parameter with default 120 (backward compatible)
 - 08-01: Timing personality generated alongside velocity personality in generatePersonality()
@@ -68,5 +70,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 08-01-PLAN.md (Pure timing offset computation module)
+Stopped at: Completed 08-02-PLAN.md (Scheduler integration -- microtiming fully wired)
 Resume file: None
