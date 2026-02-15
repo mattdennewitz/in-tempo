@@ -12,14 +12,21 @@ export class VoicePool {
   private voices: AudioWorkletNode[];
   private available: Set<number>;
   private claimOrder: number[] = [];
+  private masterGain: GainNode;
 
   constructor(audioContext: AudioContext, size: number = 4) {
     this.voices = [];
     this.available = new Set();
 
+    // Master gain node to prevent clipping when many voices sound simultaneously.
+    // Each voice outputs up to ~0.3, so scale down by voice count to keep sum ≤ 1.0.
+    this.masterGain = audioContext.createGain();
+    this.masterGain.gain.value = Math.min(1.0, 2.5 / size);
+    this.masterGain.connect(audioContext.destination);
+
     for (let i = 0; i < size; i++) {
       const node = new AudioWorkletNode(audioContext, 'synth-processor');
-      node.connect(audioContext.destination);
+      node.connect(this.masterGain);
       this.voices.push(node);
       this.available.add(i);
     }
@@ -77,6 +84,7 @@ export class VoicePool {
       voice.port.postMessage({ type: 'stop' });
       voice.disconnect();
     }
+    this.masterGain.disconnect();
     this.voices = [];
     this.available.clear();
     this.claimOrder = [];
