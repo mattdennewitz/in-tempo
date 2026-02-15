@@ -211,6 +211,7 @@ describe('Rejoin', () => {
       maxSilentBeats: 8,
     }));
     agent._mutableState.entryDelay = 0;
+    agent._mutableState.patternIndex = 5;
     agent._mutableState.status = 'silent';
     agent._mutableState.beatsSilent = 7; // One tick away from maxSilentBeats
 
@@ -228,6 +229,8 @@ describe('Rejoin', () => {
     // Tick should trigger rejoin (beatsSilent becomes 8 = maxSilentBeats)
     agent.tick(snapshot);
     expect(agent.state.status).toBe('playing');
+    // Should advance to next pattern on rejoin
+    expect(agent.state.patternIndex).toBe(6);
   });
 });
 

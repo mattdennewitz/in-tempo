@@ -414,6 +414,12 @@ export class PerformerAgent {
     s.beatsSilent = 0;
     s.beatsInCurrentNote = 0;
     s.noteIndex = 0;
+
+    // Advance to the next pattern on rejoin
+    if (s.patternIndex < FINAL_PATTERN_INDEX) {
+      s.patternIndex++;
+    }
+
     s.repetitionsRemaining = this.randomReps();
 
     // Jump forward if too far behind the band
