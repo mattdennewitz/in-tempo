@@ -22,6 +22,11 @@ import {
   type VelocityConfig,
   type VelocityContext,
 } from './velocity.ts';
+import {
+  computeTimingOffset,
+  generateTimingPersonality,
+  type TimingContext,
+} from './timing.ts';
 
 // ---------------------------------------------------------------------------
 // Interfaces
@@ -32,6 +37,7 @@ export interface AgentNoteEvent {
   midi: number;
   duration: number;
   velocity: number;
+  timingOffset: number;  // seconds, positive=late/drag, negative=early/rush
 }
 
 export interface EnsembleSnapshot {
@@ -56,6 +62,8 @@ export interface AgentPersonality {
   dropoutCooldown: number; // 16-48
   baseLoudness: number;    // 0.7-1.0
   jitterAmount: number;    // 0.02-0.12
+  rushDragBias: number;    // -0.3 to +0.3
+  timingJitter: number;    // 0.3 to 1.0
 }
 
 export interface AgentState {
@@ -70,6 +78,7 @@ export interface AgentState {
   beatsInCurrentNote: number;
   personality: AgentPersonality;
   entryDelay: number;
+  tickCount: number;
 }
 
 type Decision = 'advance' | 'repeat' | 'dropout';
@@ -206,6 +215,7 @@ function randomInRange(min: number, max: number, rng: SeededRng): number {
 export function generatePersonality(rng?: SeededRng): AgentPersonality {
   const _rng = rng ?? new SeededRng(Date.now() & 0xffffffff);
   const velocityTraits = generateVelocityPersonality(_rng);
+  const timingTraits = generateTimingPersonality(_rng);
   return {
     advanceBias: randomInRange(0.8, 1.2, _rng),
     repeatBias: randomInRange(0.8, 1.2, _rng),
@@ -215,6 +225,8 @@ export function generatePersonality(rng?: SeededRng): AgentPersonality {
     dropoutCooldown: Math.floor(randomInRange(16, 48, _rng)),
     baseLoudness: velocityTraits.baseLoudness,
     jitterAmount: velocityTraits.jitterAmount,
+    rushDragBias: timingTraits.rushDragBias,
+    timingJitter: timingTraits.timingJitter,
   };
 }
 
@@ -257,6 +269,7 @@ export class PerformerAgent {
       beatsInCurrentNote: 0,
       personality: personality ?? generatePersonality(this.rng),
       entryDelay: 0,
+      tickCount: 0,
     };
   }
 
@@ -270,8 +283,11 @@ export class PerformerAgent {
     this._state.repetitionsRemaining = reps;
   }
 
-  tick(snapshot: EnsembleSnapshot): AgentNoteEvent | null {
+  tick(snapshot: EnsembleSnapshot, bpm: number = 120): AgentNoteEvent | null {
     const s = this._state;
+
+    // Increment tick counter (before entry delay check for consistent counting)
+    s.tickCount++;
 
     // Staggered entry
     if (s.entryDelay > 0) {
@@ -346,11 +362,25 @@ export class PerformerAgent {
       config: this.velocityConfig,
     };
 
+    const secondsPerEighth = 60 / (bpm * 2);
+    const timingCtx: TimingContext = {
+      beatIndex: s.tickCount,
+      noteIndexInPattern: s.noteIndex - 1,
+      personality: {
+        rushDragBias: s.personality.rushDragBias,
+        timingJitter: s.personality.timingJitter,
+      },
+      density: snapshot.density,
+      config: this.velocityConfig,
+      secondsPerEighth,
+    };
+
     return {
       performerId: s.id,
       midi: note.midi,
       duration: note.duration,
       velocity: computeVelocity(velocityCtx, this.rng),
+      timingOffset: computeTimingOffset(timingCtx, this.rng),
     };
   }
 
@@ -526,6 +556,7 @@ export class PerformerAgent {
     this._state.beatsSinceLastDropout = 100;
     this._state.beatsInCurrentNote = 0;
     this._state.entryDelay = 0;
+    this._state.tickCount = 0;
   }
 }
 
@@ -573,7 +604,7 @@ export class Ensemble {
     }
   }
 
-  tick(): AgentNoteEvent[] {
+  tick(bpm: number = 120): AgentNoteEvent[] {
     // Process queued removals before snapshot (safe -- no iteration in progress)
     if (this.pendingRemovals.size > 0) {
       this.agents = this.agents.filter(a => !this.pendingRemovals.has(a.state.id));
@@ -588,7 +619,7 @@ export class Ensemble {
 
     const events: AgentNoteEvent[] = [];
     for (const agent of this.agents) {
-      const event = agent.tick(snapshot);
+      const event = agent.tick(snapshot, bpm);
       if (event) {
         events.push(event);
       }

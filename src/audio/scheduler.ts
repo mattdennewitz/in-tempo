@@ -160,7 +160,7 @@ export class Scheduler {
    * or sampled instrument).
    */
   private scheduleBeat(time: number): void {
-    const events = this.ensemble.tick();
+    const events = this.ensemble.tick(this._bpm);
 
     // Check for ensemble completion
     if (this.ensemble.isComplete) {
