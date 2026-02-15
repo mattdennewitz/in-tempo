@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 ## Current Position
 
 Phase: 5 of 6 (Velocity Humanization)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-15 -- Roadmap created for v1.1 MIDI milestone
+Plan: 1 of 3 in current phase
+Status: Executing
+Last activity: 2026-02-15 -- Completed 05-01 velocity computation model
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 17%
 
 ## Performance Metrics
 
@@ -27,7 +27,7 @@ Progress: [░░░░░░░░░░] 0%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 5. Velocity | - | - | - |
+| 5. Velocity | 1/3 | 1min | 1min |
 | 6. MIDI Export | - | - | - |
 
 *Updated after each plan completion*
@@ -43,6 +43,8 @@ Recent decisions affecting current work:
 - [Roadmap]: CFG-01 (default 4 performers) bundled with velocity phase since both affect default experience
 - [Research]: midi-writer-js v3.1.1 for MIDI generation (velocity scale 1-100, not 0-127)
 - [Research]: Parallel integer tick counter (PPQ=480) to prevent time drift in MIDI recording
+- [05-01]: Velocity floor at 0.3 to prevent inaudible notes from multiplicative stacking
+- [05-01]: Pattern-relative accent (noteIndexInPattern===0) rather than global beat counter
 
 ### Pending Todos
 
@@ -55,5 +57,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Roadmap created, ready to plan Phase 5
+Stopped at: Completed 05-01-PLAN.md (velocity computation model)
 Resume file: None
