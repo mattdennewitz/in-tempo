@@ -79,29 +79,29 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| STE-01 | - | Pending |
-| STE-02 | - | Pending |
-| STE-03 | - | Pending |
-| SEED-01 | - | Pending |
-| SEED-02 | - | Pending |
-| SEED-03 | - | Pending |
-| SEED-04 | - | Pending |
-| SEED-05 | - | Pending |
-| SEED-06 | - | Pending |
-| VIZ-01 | - | Pending |
-| VIZ-02 | - | Pending |
-| VIZ-03 | - | Pending |
-| TIME-01 | - | Pending |
-| TIME-02 | - | Pending |
-| TIME-03 | - | Pending |
-| TIME-04 | - | Pending |
-| TIME-05 | - | Pending |
+| STE-01 | Phase 9 | Pending |
+| STE-02 | Phase 9 | Pending |
+| STE-03 | Phase 9 | Pending |
+| SEED-01 | Phase 7 | Pending |
+| SEED-02 | Phase 7 | Pending |
+| SEED-03 | Phase 7 | Pending |
+| SEED-04 | Phase 7 | Pending |
+| SEED-05 | Phase 7 | Pending |
+| SEED-06 | Phase 7 | Pending |
+| VIZ-01 | Phase 10 | Pending |
+| VIZ-02 | Phase 10 | Pending |
+| VIZ-03 | Phase 10 | Pending |
+| TIME-01 | Phase 8 | Pending |
+| TIME-02 | Phase 8 | Pending |
+| TIME-03 | Phase 8 | Pending |
+| TIME-04 | Phase 8 | Pending |
+| TIME-05 | Phase 8 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 17 total
-- Mapped to phases: 0
-- Unmapped: 17 ⚠️
+- Mapped to phases: 17
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-15*
-*Last updated: 2026-02-15 after initial definition*
+*Last updated: 2026-02-15 after roadmap creation*

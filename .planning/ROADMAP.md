@@ -4,6 +4,7 @@
 
 - ✅ **v1.0 MVP** — Phases 1-4 (shipped 2026-02-15)
 - ✅ **v1.1 MIDI** — Phases 5-6 (shipped 2026-02-15)
+- 🚧 **v1.2 Polish** — Phases 7-10 (in progress)
 
 ## Phases
 
@@ -25,7 +26,76 @@
 
 </details>
 
+### 🚧 v1.2 Polish (In Progress)
+
+**Milestone Goal:** Elevate the listening and sharing experience with stereo spread, pattern visualization, shareable seeded performances, and microtiming humanization.
+
+- [ ] **Phase 7: Seeded PRNG** — Deterministic performances reproducible via shared URL
+- [ ] **Phase 8: Microtiming** — Swing, rubato, and per-performer timing personality
+- [ ] **Phase 9: Stereo Spread** — Performers panned across the stereo field
+- [ ] **Phase 10: Pattern Visualization** — Score overview and per-performer visual feedback
+
+## Phase Details
+
+### Phase 7: Seeded PRNG
+**Goal**: Users can share a URL that reproduces an identical performance note-for-note
+**Depends on**: Phase 6 (v1.1 complete)
+**Requirements**: SEED-01, SEED-02, SEED-03, SEED-04, SEED-05, SEED-06
+**Success Criteria** (what must be TRUE):
+  1. Starting a performance with the same seed, mode, BPM, and performer count produces the exact same note sequence every time
+  2. The current seed is visible in the UI and can be copied to clipboard with one click
+  3. User can enter a seed manually to replay a specific performance
+  4. Pasting a shared URL into a browser auto-configures mode, BPM, performer count, and seed, then starts the same performance
+**Plans**: TBD
+
+Plans:
+- [ ] 07-01: TBD
+- [ ] 07-02: TBD
+
+### Phase 8: Microtiming
+**Goal**: Performances feel rhythmically organic with swing, rubato, and per-performer timing variation
+**Depends on**: Phase 7 (seeded PRNG required for deterministic timing jitter)
+**Requirements**: TIME-01, TIME-02, TIME-03, TIME-04, TIME-05
+**Success Criteria** (what must be TRUE):
+  1. Enabling swing shifts alternate eighth notes forward, audibly changing the groove feel
+  2. Each performer has a subtle but audible timing personality (some rush, some drag) creating ensemble spread
+  3. Rubato gently breathes the effective tempo so the ensemble feels less mechanical
+  4. Microtiming is controlled through the existing humanization toggle and intensity levels
+**Plans**: TBD
+
+Plans:
+- [ ] 08-01: TBD
+- [ ] 08-02: TBD
+
+### Phase 9: Stereo Spread
+**Goal**: Each performer occupies a distinct position in the stereo field, giving spatial clarity to the ensemble
+**Depends on**: Phase 7 (deterministic pan assignment uses seeded performer IDs)
+**Requirements**: STE-01, STE-02, STE-03
+**Success Criteria** (what must be TRUE):
+  1. Listening on headphones, each performer is audibly positioned at a different point in the stereo field
+  2. Pan positions are stable across resets and replays (same performer ID = same position)
+  3. Performers are evenly distributed across the stereo field (no clustering on one side)
+**Plans**: TBD
+
+Plans:
+- [ ] 09-01: TBD
+
+### Phase 10: Pattern Visualization
+**Goal**: Users can see ensemble structure and activity through visual feedback on performer cards and a score overview
+**Depends on**: Phase 7 (seeded replay means visualization is reproducible)
+**Requirements**: VIZ-01, VIZ-02, VIZ-03
+**Success Criteria** (what must be TRUE):
+  1. Performer cards flash or pulse visibly when a note is played
+  2. Performer cards show progress within the current pattern repetition
+  3. A score overview visualization shows all performers' positions across the full pattern sequence, revealing canonic phasing and convergence
+**Plans**: TBD
+
+Plans:
+- [ ] 10-01: TBD
+
 ## Progress
+
+**Execution Order:** 7 → 8 → 9 → 10
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -35,8 +105,13 @@
 | 4. Composition Modes | v1.0 | 3/3 | Complete | 2026-02-15 |
 | 5. Velocity Humanization | v1.1 | 3/3 | Complete | 2026-02-15 |
 | 6. MIDI Export | v1.1 | 2/2 | Complete | 2026-02-15 |
+| 7. Seeded PRNG | v1.2 | 0/TBD | Not started | - |
+| 8. Microtiming | v1.2 | 0/TBD | Not started | - |
+| 9. Stereo Spread | v1.2 | 0/TBD | Not started | - |
+| 10. Pattern Visualization | v1.2 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-15*
 *v1.0 MVP shipped: 2026-02-15*
 *v1.1 MIDI shipped: 2026-02-15*
+*v1.2 Polish started: 2026-02-15*
