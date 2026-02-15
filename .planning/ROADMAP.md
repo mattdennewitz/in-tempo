@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1-4 (shipped 2026-02-15)
-- 🚧 **v1.1 MIDI** — Phases 5-6 (in progress)
+- ✅ **v1.1 MIDI** — Phases 5-6 (shipped 2026-02-15)
 
 ## Phases
 
@@ -17,12 +17,12 @@
 
 </details>
 
-### v1.1 MIDI (In Progress)
+### v1.1 MIDI (Complete)
 
 **Milestone Goal:** Add velocity humanization to make performances feel more alive in audio and MIDI, then export performances as downloadable multi-track MIDI files. Default to 4 performers for a cleaner listening experience.
 
 - [x] **Phase 5: Velocity Humanization** — Per-note velocity variation with personality, metric accents, and phrase contour audible in playback — completed 2026-02-15
-- [ ] **Phase 6: MIDI Export** — Record and export performances as downloadable multi-track .mid files
+- [x] **Phase 6: MIDI Export** — Record and export performances as downloadable multi-track .mid files — completed 2026-02-15
 
 ## Phase Details
 
@@ -57,8 +57,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — MIDI recording pipeline + export conversion (MidiRecorder, MidiExporter, Scheduler/Engine wiring)
-- [ ] 06-02-PLAN.md — Export button UI + end-to-end verification
+- [x] 06-01-PLAN.md — MIDI recording pipeline + export conversion (MidiRecorder, MidiExporter, Scheduler/Engine wiring)
+- [x] 06-02-PLAN.md — Export button UI + end-to-end verification
 
 ## Progress
 
@@ -72,9 +72,11 @@ Phases execute in numeric order: 5 → 6
 | 3. Visualization + Instruments + Polish | v1.0 | 3/3 | Complete | 2026-02-15 |
 | 4. Composition Modes | v1.0 | 3/3 | Complete | 2026-02-15 |
 | 5. Velocity Humanization | v1.1 | 3/3 | Complete | 2026-02-15 |
-| 6. MIDI Export | v1.1 | 0/2 | Not started | - |
+| 6. MIDI Export | v1.1 | 2/2 | Complete | 2026-02-15 |
 
 ---
 *Roadmap created: 2026-02-15*
 *Last updated: 2026-02-15*
 *Phase 5 completed: 2026-02-15*
+*Phase 6 completed: 2026-02-15*
+*v1.1 MIDI milestone shipped: 2026-02-15*
