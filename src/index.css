@@ -1,10 +1,34 @@
+/* GT Canon font-face declarations -- gracefully no-op if files absent */
+@font-face {
+  font-family: 'GT Canon';
+  src: url('/fonts/GTCanon-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'GT Canon';
+  src: url('/fonts/GTCanon-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'GT Canon';
+  src: url('/fonts/GTCanon-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    Helvetica, Arial, sans-serif;
+  font-family: 'GT Canon', Georgia, 'Times New Roman', serif;
   line-height: 1.5;
   font-weight: 400;
-  color: #213547;
-  background-color: #fafafa;
+  color: #1B2838;
+  background-color: #FDF6EE;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -20,6 +44,9 @@
 body {
   min-height: 100vh;
   min-width: 320px;
+  font-family: 'GT Canon', Georgia, 'Times New Roman', serif;
+  background-color: #FDF6EE;
+  color: #1B2838;
 }
 
 #root {

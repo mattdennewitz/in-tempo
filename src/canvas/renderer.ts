@@ -1,5 +1,5 @@
 import type { PerformerState } from '../audio/types.ts';
-import { PALETTE, STATE_COLORS, FONT_STACK, CELL_WIDTH, CELL_HEIGHT, CELL_GAP, COLS, CELL_RADIUS } from './theme.ts';
+import { STATE_COLORS, FONT_STACK, CELL_WIDTH, CELL_HEIGHT, CELL_GAP, COLS, CELL_RADIUS } from './theme.ts';
 
 /**
  * Set up canvas for retina/HiDPI displays.
