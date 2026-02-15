@@ -100,26 +100,25 @@ export class AudioEngine {
     this.currentPatterns = getPatternsForMode(mode);
 
     if (this.initialized) {
-      // Stop and silence everything
+      // Preserve callback before tearing down old scheduler
+      const callback = this.scheduler?.onStateChange ?? this.pendingOnStateChange;
+
+      // Fully dispose old scheduler (clears tick timer + release timers)
       this.scheduler?.reset();
       this.voicePool?.stopAll();
-
-      // Preserve the onStateChange callback
-      const callback = this.scheduler?.onStateChange ?? this.pendingOnStateChange;
 
       // Rebuild ensemble and scheduler with new patterns
       this.ensemble = new Ensemble(this.performerCount, this.currentPatterns, mode);
       this.scheduler = new Scheduler(this.audioContext!, this.voicePool!, this.ensemble);
 
-      // Reconnect callback
+      // Reconnect callback and fire state change
       if (callback) {
         this.scheduler.onStateChange = callback;
+        callback(this.getState());
       }
-
-      // Fire state change to update UI (not playing, fresh performers)
-      if (this.scheduler.onStateChange) {
-        this.scheduler.onStateChange(this.getState());
-      }
+    } else if (this.pendingOnStateChange) {
+      // Not yet initialized — fire fallback state so UI reflects new mode/pattern count
+      this.pendingOnStateChange(this.getState());
     }
   }
 

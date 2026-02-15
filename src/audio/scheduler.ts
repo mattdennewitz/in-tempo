@@ -60,7 +60,12 @@ export class Scheduler {
 
   /** Hard stop: silence everything and reset ensemble to initial state. */
   reset(): void {
-    this.stop();
+    // Stop tick loop (suppresses its own state change since we fire below)
+    this._playing = false;
+    if (this.timerId !== null) {
+      clearTimeout(this.timerId);
+      this.timerId = null;
+    }
     // Clear all pending release timers
     for (const timer of this.releaseTimers.values()) {
       clearTimeout(timer);

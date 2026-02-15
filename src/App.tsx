@@ -1,33 +1,31 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { AudioEngine } from './audio/engine.ts';
-import type { PerformerState, ScoreMode } from './audio/types.ts';
+import type { EnsembleEngineState, ScoreMode } from './audio/types.ts';
 import { ScoreModeSelector } from './components/ScoreModeSelector.tsx';
 import { Transport } from './components/Transport.tsx';
 import { BpmSlider } from './components/BpmSlider.tsx';
 import { PatternDisplay } from './components/PatternDisplay.tsx';
 import './App.css';
 
+const INITIAL_STATE: EnsembleEngineState = {
+  playing: false,
+  bpm: 120,
+  performers: [],
+  ensembleComplete: false,
+  totalPatterns: 53,
+  scoreMode: 'riley',
+};
+
 function App() {
   const engineRef = useRef<AudioEngine>(new AudioEngine());
 
-  const [playing, setPlaying] = useState(false);
-  const [performers, setPerformers] = useState<PerformerState[]>([]);
-  const [ensembleComplete, setEnsembleComplete] = useState(false);
-  const [bpm, setBpm] = useState(120);
-  const [scoreMode, setScoreMode] = useState<ScoreMode>('riley');
-  const [totalPatterns, setTotalPatterns] = useState(53);
+  const [engineState, setEngineState] = useState<EnsembleEngineState>(INITIAL_STATE);
 
   useEffect(() => {
     const engine = engineRef.current;
-    engine.onStateChange = (state) => {
-      setPlaying(state.playing);
-      setPerformers(state.performers);
-      setEnsembleComplete(state.ensembleComplete);
-      setBpm(state.bpm);
-      setScoreMode(state.scoreMode);
-      setTotalPatterns(state.totalPatterns);
-    };
+    engine.onStateChange = setEngineState;
     return () => {
+      engine.onStateChange = null;
       engine.dispose();
     };
   }, []);
@@ -55,24 +53,24 @@ function App() {
   return (
     <div className="app">
       <ScoreModeSelector
-        currentMode={scoreMode}
+        currentMode={engineState.scoreMode}
         onChange={handleModeChange}
       />
       <PatternDisplay
-        performers={performers}
-        playing={playing}
-        ensembleComplete={ensembleComplete}
-        totalPatterns={totalPatterns}
-        scoreMode={scoreMode}
+        performers={engineState.performers}
+        playing={engineState.playing}
+        ensembleComplete={engineState.ensembleComplete}
+        totalPatterns={engineState.totalPatterns}
+        scoreMode={engineState.scoreMode}
       />
       <Transport
-        playing={playing}
+        playing={engineState.playing}
         onStart={handleStart}
         onStop={handleStop}
         onReset={handleReset}
       />
       <BpmSlider
-        bpm={bpm}
+        bpm={engineState.bpm}
         onChange={handleBpmChange}
       />
     </div>
