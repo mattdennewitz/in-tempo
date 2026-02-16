@@ -76,10 +76,11 @@ Plans:
   1. Listening on headphones, each performer is audibly positioned at a different point in the stereo field
   2. Pan positions are stable across resets and replays (same performer ID = same position)
   3. Performers are evenly distributed across the stereo field (no clustering on one side)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 09-01: TBD
+- [ ] 09-01-PLAN.md — TDD pan position computation (evenly-distributed, seeded shuffle)
+- [ ] 09-02-PLAN.md — Wire StereoPannerNodes into audio graph (synth + sampled routing)
 
 ### Phase 10: Pattern Visualization
 **Goal**: Users can see ensemble structure and activity through visual feedback on performer cards and a score overview
