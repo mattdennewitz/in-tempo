@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Ensemble behavior must feel alive -- performers making believable musical decisions over a precisely timed audio engine, so each performance is unique and compelling.
-**Current focus:** Phase 8 complete -- Microtiming fully wired (timing offsets + rubato in scheduler)
+**Current focus:** Phase 9 in progress -- Stereo spread (pan position computation done, audio graph wiring next)
 
 ## Current Position
 
-Phase: 8 of 10 (Microtiming) -- COMPLETE
-Plan: 2 of 2 in current phase (done)
-Status: Phase 8 complete
-Last activity: 2026-02-15 -- Completed 08-02 (Scheduler integration -- timing offsets and rubato)
+Phase: 9 of 10 (Stereo Spread)
+Plan: 1 of 2 in current phase (09-01 complete)
+Status: Executing phase 9
+Last activity: 2026-02-15 -- Completed 09-01 (Pan position computation with seeded shuffle)
 
-Progress: [████████████████████] 85% (18/18 plans complete through 08-02)
+Progress: [█████████████████████] 90% (19/20 plans complete through 09-01)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 20 (v1.0: 11, v1.1: 5, v1.2: 4)
+- Total plans completed: 21 (v1.0: 11, v1.1: 5, v1.2: 5)
 - Average duration: --
 - Total execution time: --
 
@@ -31,6 +31,7 @@ Progress: [████████████████████] 85% (18
 | 5-6 (v1.1) | 5 | -- | -- |
 | 7 (v1.2) | 3 | 10min | 3min |
 | 8 (v1.2) | 2 | 6min | 3min |
+| 9 (v1.2) | 1 | 1min | 1min |
 
 **Recent Trend:**
 - Last 5 plans: --
@@ -45,6 +46,8 @@ Progress: [████████████████████] 85% (18
 All decisions logged in PROJECT.md Key Decisions table.
 
 Recent decisions affecting current work:
+- 09-01: Round pan positions to 4 decimal places (toFixed(4)) to avoid floating-point noise
+- 09-01: Shuffle slots directly rather than indices (simpler, same result)
 - 08-02: Rubato getter (Option A) instead of tick() return type change
 - 08-02: Rubato period preserved across reset (personality of the performance)
 - 08-01: Per-agent tickCount for beat index (not passed through tick() signature)
@@ -70,5 +73,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 08-02-PLAN.md (Scheduler integration -- microtiming fully wired)
+Stopped at: Completed 09-01-PLAN.md (Pan position computation with seeded shuffle)
 Resume file: None
