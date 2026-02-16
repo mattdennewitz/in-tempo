@@ -54,7 +54,7 @@ function ScoreOverviewInner({ performers, totalPatterns, scoreMode, playing }: S
 
   return (
     <div className="w-full max-w-4xl mx-auto mt-4">
-      <div ref={scrollRef} className="overflow-x-auto">
+      <div ref={scrollRef} className="overflow-x-auto overflow-y-hidden border border-border rounded-md p-2">
         <div
           className="inline-grid gap-px"
           style={{
