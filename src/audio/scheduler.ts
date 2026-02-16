@@ -40,6 +40,10 @@ export class Scheduler {
   velocityConfigRef: { current: VelocityConfig } = { current: { enabled: true, intensity: 'moderate' } };
   midiRecorder: MidiRecorder | null = null;
 
+  // Stereo spread: per-performer pan routing (set by Engine)
+  performerPanNodes: Map<number, StereoPannerNode> | null = null;
+  performerPanValues: Map<number, number> | null = null;
+
   constructor(
     audioContext: AudioContext,
     voicePool: VoicePool,
@@ -187,6 +191,13 @@ export class Scheduler {
         const voice = this.voicePool.claim();
         const frequency = midiToFrequency(event.midi);
 
+        // Route through performer's pan node for stereo spread
+        const panNode = this.performerPanNodes?.get(event.performerId);
+        if (panNode) {
+          voice.node.disconnect();
+          voice.node.connect(panNode);
+        }
+
         // Cancel any pending release timer for this voice
         const existingTimer = this.releaseTimers.get(voice.index);
         if (existingTimer !== undefined) {
@@ -210,7 +221,12 @@ export class Scheduler {
       } else {
         // Route through SamplePlayer (smplr piano/marimba)
         const smplrVelocity = Math.round(event.velocity * 127);
-        this.samplePlayer.play(instrument, event.midi, offsetTime, noteDurationSeconds, smplrVelocity);
+        const panValue = this.performerPanValues?.get(event.performerId);
+        if (panValue !== undefined) {
+          this.samplePlayer.playPanned(instrument, event.midi, offsetTime, noteDurationSeconds, smplrVelocity, panValue);
+        } else {
+          this.samplePlayer.play(instrument, event.midi, offsetTime, noteDurationSeconds, smplrVelocity);
+        }
       }
 
       // Record event for MIDI export

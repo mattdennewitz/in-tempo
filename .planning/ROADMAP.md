@@ -32,7 +32,7 @@
 
 - [x] **Phase 7: Seeded PRNG** — Deterministic performances reproducible via shared URL — completed 2026-02-15
 - [x] **Phase 8: Microtiming** — Swing, rubato, and per-performer timing personality — completed 2026-02-15
-- [ ] **Phase 9: Stereo Spread** — Performers panned across the stereo field
+- [x] **Phase 9: Stereo Spread** — Performers panned across the stereo field — completed 2026-02-15
 - [ ] **Phase 10: Pattern Visualization** — Score overview and per-performer visual feedback
 
 ## Phase Details
@@ -76,10 +76,11 @@ Plans:
   1. Listening on headphones, each performer is audibly positioned at a different point in the stereo field
   2. Pan positions are stable across resets and replays (same performer ID = same position)
   3. Performers are evenly distributed across the stereo field (no clustering on one side)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 09-01: TBD
+- [x] 09-01-PLAN.md — TDD pan position computation (evenly-distributed, seeded shuffle)
+- [x] 09-02-PLAN.md — Wire StereoPannerNodes into audio graph (synth + sampled routing)
 
 ### Phase 10: Pattern Visualization
 **Goal**: Users can see ensemble structure and activity through visual feedback on performer cards and a score overview
@@ -108,7 +109,7 @@ Plans:
 | 6. MIDI Export | v1.1 | 2/2 | Complete | 2026-02-15 |
 | 7. Seeded PRNG | v1.2 | 3/3 | Complete | 2026-02-15 |
 | 8. Microtiming | v1.2 | 2/2 | Complete | 2026-02-15 |
-| 9. Stereo Spread | v1.2 | 0/TBD | Not started | - |
+| 9. Stereo Spread | v1.2 | 2/2 | Complete | 2026-02-15 |
 | 10. Pattern Visualization | v1.2 | 0/TBD | Not started | - |
 
 ---
