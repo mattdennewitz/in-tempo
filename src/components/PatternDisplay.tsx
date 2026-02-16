@@ -1,59 +1,93 @@
-import type { PerformerState, ScoreMode } from '../audio/types.ts';
+import type { PerformerState } from '../audio/types.ts';
+import { cn } from '@/lib/utils';
+
+const CARD = 'w-[7.5rem] h-8 flex items-center gap-1.5 px-2 border rounded text-sm tabular-nums transition-opacity duration-300';
 
 interface PatternDisplayProps {
   performers: PerformerState[];
   playing: boolean;
   ensembleComplete: boolean;
   totalPatterns: number;
-  scoreMode: ScoreMode;
+  maxPerformers: number;
+  activeCount: number;
 }
 
-const MODE_LABELS: Record<ScoreMode, string> = {
-  riley: 'Riley',
-  generative: 'Generative',
-  euclidean: 'Euclidean',
-};
-
-export function PatternDisplay({ performers, playing, ensembleComplete, totalPatterns: _totalPatterns, scoreMode }: PatternDisplayProps) {
+export function PatternDisplay({
+  performers,
+  playing,
+  ensembleComplete,
+  totalPatterns: _totalPatterns,
+  maxPerformers,
+  activeCount,
+}: PatternDisplayProps) {
   if (ensembleComplete) {
     return (
       <div className="text-center">
-        <span className="mode-badge">{MODE_LABELS[scoreMode]}</span>
         <span className="text-xl font-medium tracking-tight">Performance Complete</span>
       </div>
     );
   }
 
+  // Build slots for all possible performers
+  const slots = Array.from({ length: maxPerformers }, (_, i) => {
+    const performer = performers.find(p => p.id === i);
+    const isActive = playing ? !!performer : i < activeCount;
+    return { index: i, performer, isActive };
+  });
+
   if (!playing && performers.length === 0) {
     return (
-      <div className="text-center">
+      <div className="flex flex-col items-center gap-4">
         <span className="text-xl font-medium tracking-tight">Ready</span>
+        <div className="grid grid-cols-4 gap-2">
+          {slots.map(({ index, isActive }) => (
+            <div
+              key={index}
+              className={cn(CARD, isActive ? 'opacity-60' : 'opacity-15')}
+            >
+              <span className="text-muted-foreground font-medium w-[1.8em] shrink-0">P{index + 1}</span>
+              <span className="text-muted-foreground">&mdash;</span>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
     <div className="text-center">
-      <span className="mode-badge">{MODE_LABELS[scoreMode]}</span>
-      <div className="grid grid-cols-4 gap-2 min-w-[280px]">
-        {performers.map((p) => (
-          <div
-            key={p.id}
-            className={`flex items-center gap-1.5 px-2 py-1 border rounded text-sm tabular-nums transition-opacity duration-300 ${
-              p.status === 'playing' ? 'opacity-100' :
-              p.status === 'silent' ? 'opacity-40' :
-              'opacity-20'
-            }`}
-          >
-            <span className="text-muted-foreground font-medium min-w-[1.8em]">P{p.id + 1}</span>
-            <span>
-              {p.status === 'complete' ? 'Done' : p.status === 'silent' ? '...' : `${p.currentPattern}`}
-            </span>
-            <span className="text-muted-foreground text-xs min-w-[2.5em] text-right">
-              {p.status === 'complete' ? '' : p.status === 'silent' ? '' : `${p.currentRep}/${p.totalReps}`}
-            </span>
-          </div>
-        ))}
+      <div className="grid grid-cols-4 gap-2">
+        {slots.map(({ index, performer, isActive }) => {
+          if (!isActive) {
+            return (
+              <div key={index} className={cn(CARD, 'opacity-15')}>
+                <span className="text-muted-foreground font-medium w-[1.8em] shrink-0">P{index + 1}</span>
+                <span className="text-muted-foreground">&mdash;</span>
+              </div>
+            );
+          }
+
+          const status = performer?.status ?? 'silent';
+          return (
+            <div
+              key={index}
+              className={cn(
+                CARD,
+                status === 'playing' ? 'opacity-100 shadow-sm' :
+                status === 'silent' ? 'opacity-40' :
+                'opacity-20',
+              )}
+            >
+              <span className="text-muted-foreground font-medium w-[1.8em] shrink-0">P{index + 1}</span>
+              <span className="truncate">
+                {status === 'complete' ? 'Done' : status === 'silent' ? '...' : `${performer!.currentPattern}`}
+              </span>
+              <span className="text-muted-foreground text-xs ml-auto shrink-0">
+                {status === 'complete' || status === 'silent' ? '' : `${performer!.currentRep}/${performer!.totalReps}`}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
