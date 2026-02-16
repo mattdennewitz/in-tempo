@@ -31,7 +31,7 @@ const INITIAL_STATE: EnsembleEngineState = {
   scoreMode: 'riley',
   pulseEnabled: false,
   performerCount: 4,
-  humanizationEnabled: true,
+  humanizationEnabled: false,
   humanizationIntensity: 'moderate',
   hasRecording: false,
   seed: 0,

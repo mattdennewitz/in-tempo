@@ -31,7 +31,7 @@ export class AudioEngine {
   private initialPerformerCount = 4;
   private currentMode: ScoreMode = 'riley';
   private currentPatterns: Pattern[] = PATTERNS;
-  private velocityConfig: VelocityConfig = { enabled: true, intensity: 'moderate' };
+  private velocityConfig: VelocityConfig = { enabled: false, intensity: 'moderate' };
   private midiRecorder: MidiRecorder = new MidiRecorder();
   private currentSeed: number = 0;
   private _advanceWeight: number = 0.3;
@@ -122,9 +122,11 @@ export class AudioEngine {
     // Compute deterministic pan positions
     const panPositions = computePanPositions(count, rng);
 
-    // Create per-performer pan nodes
+    // Create per-performer pan nodes routed through voicePool's masterGain
+    // so clipping prevention gain scaling is preserved
+    const synthDest = this.voicePool?.outputNode ?? ctx.destination;
     for (let i = 0; i < count; i++) {
-      const panNode = createPerformerPanNode(ctx, panPositions[i], ctx.destination);
+      const panNode = createPerformerPanNode(ctx, panPositions[i], synthDest);
       this.performerPanNodes.set(i, panNode);
       this.performerPanValues.set(i, panPositions[i]);
     }
@@ -281,7 +283,7 @@ export class AudioEngine {
   }
 
   /** Set performer count. Before first start, sets initial count. After init, rebuilds ensemble on next start. */
-  setPerformerCount(count: number): void {
+  async setPerformerCount(count: number): Promise<void> {
     this.initialPerformerCount = Math.max(2, Math.min(16, count));
     if (this.initialized && !this.getState().playing) {
       // Rebuild ensemble with new count so next start() uses it
@@ -304,7 +306,7 @@ export class AudioEngine {
       // Reinitialize sampled instruments with new pan groups
       this.samplePlayer?.dispose();
       this.samplePlayer = new SamplePlayer(this.audioContext!);
-      this.samplePlayer.initialize({
+      await this.samplePlayer.initialize({
         left: this.samplePanNodes[0],
         center: this.samplePanNodes[1],
         right: this.samplePanNodes[2],
@@ -411,7 +413,7 @@ export class AudioEngine {
    * Switch score mode. Generates new patterns, rebuilds Ensemble and Scheduler.
    * Does NOT auto-restart playback -- user must click Start.
    */
-  setScoreMode(mode: ScoreMode): void {
+  async setScoreMode(mode: ScoreMode): Promise<void> {
     this.currentMode = mode;
 
     // Create seeded RNG for deterministic pattern generation
@@ -438,7 +440,7 @@ export class AudioEngine {
       // Reinitialize sampled instruments with new pan groups
       this.samplePlayer?.dispose();
       this.samplePlayer = new SamplePlayer(this.audioContext!);
-      this.samplePlayer.initialize({
+      await this.samplePlayer.initialize({
         left: this.samplePanNodes[0],
         center: this.samplePanNodes[1],
         right: this.samplePanNodes[2],

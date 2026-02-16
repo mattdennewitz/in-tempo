@@ -108,6 +108,11 @@ export class VoicePool {
     return this.voices.length;
   }
 
+  /** Expose the master gain node so pan nodes can route through it. */
+  get outputNode(): GainNode {
+    return this.masterGain;
+  }
+
   /** Disconnect all nodes for cleanup on reset/destroy. */
   dispose(): void {
     for (const voice of this.voices) {
