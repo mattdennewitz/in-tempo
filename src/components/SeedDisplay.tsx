@@ -5,9 +5,12 @@ interface SeedDisplayProps {
   seed: number;           // Current seed (0 = not yet generated)
   playing: boolean;       // Whether performance is active
   onSeedChange: (seed: number) => void;  // User enters a seed
+  mode: string;           // Current score mode
+  bpm: number;            // Current BPM
+  performerCount: number; // Current performer count
 }
 
-export function SeedDisplay({ seed, playing, onSeedChange }: SeedDisplayProps) {
+export function SeedDisplay({ seed, playing, onSeedChange, mode, bpm, performerCount }: SeedDisplayProps) {
   const [inputValue, setInputValue] = useState('');
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
@@ -24,10 +27,16 @@ export function SeedDisplay({ seed, playing, onSeedChange }: SeedDisplayProps) {
 
   const handleCopyLink = useCallback(() => {
     if (seed === 0) return;
-    const url = window.location.href.split('#')[0] + '#' + window.location.hash.slice(1);
+    const params = new URLSearchParams({
+      seed: seed.toString(),
+      mode,
+      bpm: bpm.toString(),
+      count: performerCount.toString(),
+    });
+    const url = window.location.href.split('#')[0] + '#' + params.toString();
     navigator.clipboard.writeText(url);
     showFeedback('Link copied!');
-  }, [seed, showFeedback]);
+  }, [seed, mode, bpm, performerCount, showFeedback]);
 
   const handleSubmit = useCallback(() => {
     const parsed = parseInt(inputValue, 10);

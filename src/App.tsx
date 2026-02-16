@@ -26,6 +26,8 @@ const INITIAL_STATE: EnsembleEngineState = {
   seed: 0,
 };
 
+const VALID_MODES: ScoreMode[] = ['riley', 'generative', 'euclidean'];
+
 function parsePerformanceHash(): { seed: number; mode: ScoreMode; bpm: number; count: number } | null {
   const hash = window.location.hash.slice(1);
   if (!hash) return null;
@@ -35,6 +37,7 @@ function parsePerformanceHash(): { seed: number; mode: ScoreMode; bpm: number; c
   const bpm = params.get('bpm');
   const count = params.get('count');
   if (!seed || !mode || !bpm || !count) return null;
+  if (!VALID_MODES.includes(mode as ScoreMode)) return null;
   const parsedSeed = parseInt(seed, 10);
   const parsedBpm = parseInt(bpm, 10);
   const parsedCount = parseInt(count, 10);
@@ -165,6 +168,9 @@ function App() {
         seed={engineState.seed}
         playing={engineState.playing}
         onSeedChange={handleSeedChange}
+        mode={engineState.scoreMode}
+        bpm={engineState.bpm}
+        performerCount={engineState.performerCount}
       />
       <ExportButton
         onExport={handleExport}
