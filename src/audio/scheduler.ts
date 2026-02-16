@@ -31,7 +31,7 @@ export class Scheduler {
   private pulseGenerator: PulseGenerator;
 
   private nextNoteTime: number = 0;
-  private _bpm: number = 120;
+  private _bpm: number = 140;
   private _playing: boolean = false;
   private timerId: ReturnType<typeof setTimeout> | null = null;
   private releaseTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
@@ -102,7 +102,7 @@ export class Scheduler {
     this.ensemble.reset();
     this.midiRecorder?.clear();
     this.beatCounter = 0;
-    this._bpm = 120;
+    this._bpm = 140;
     this.fireStateChange();
   }
 

@@ -414,7 +414,7 @@ export class AudioEngine {
   getState(): EnsembleEngineState {
     const base = this.scheduler?.getState() ?? {
       playing: false,
-      bpm: 120,
+      bpm: 140,
       performers: [],
       ensembleComplete: false,
       totalPatterns: this.currentPatterns.length,

@@ -87,7 +87,7 @@ export function PatternDisplay({
                 />
               )}
               <span className="text-muted-foreground font-medium w-[1.8em] shrink-0">P{index + 1}</span>
-              <span className="truncate">
+              <span className="truncate text-xs">
                 {status === 'complete' ? 'Done' : status === 'silent' ? 'Resting' : `${performer!.currentPattern}/${totalPatterns}`}
               </span>
               {status === 'playing' && performer!.totalReps > 0 && (
