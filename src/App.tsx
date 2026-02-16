@@ -6,6 +6,7 @@ import { ScoreModeSelector } from './components/ScoreModeSelector.tsx';
 import { Transport } from './components/Transport.tsx';
 import { BpmSlider } from './components/BpmSlider.tsx';
 import { PatternDisplay } from './components/PatternDisplay.tsx';
+import { ScoreOverview } from './components/ScoreOverview.tsx';
 import { PerformerControls } from './components/PerformerControls.tsx';
 import { HumanizationToggle } from './components/HumanizationToggle.tsx';
 import { ExportButton } from './components/ExportButton.tsx';
@@ -340,7 +341,7 @@ function App() {
       {/* Performer visualization */}
       <main
         aria-label="Performer visualization"
-        className="flex-1 flex items-center justify-center p-4 lg:p-8"
+        className="flex-1 flex flex-col items-center justify-center gap-6 p-4 lg:p-8"
       >
         <PatternDisplay
           performers={engineState.performers}
@@ -349,6 +350,12 @@ function App() {
           totalPatterns={engineState.totalPatterns}
           maxPerformers={16}
           activeCount={activeCount}
+        />
+        <ScoreOverview
+          performers={engineState.performers}
+          totalPatterns={engineState.totalPatterns}
+          scoreMode={engineState.scoreMode}
+          playing={engineState.playing}
         />
       </main>
     </div>
