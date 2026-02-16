@@ -53,10 +53,10 @@ function ScoreOverviewInner({ performers, totalPatterns, scoreMode, playing }: S
   }, [columnCount]);
 
   return (
-    <div className="w-full max-w-4xl mx-auto mt-4">
-      <div ref={scrollRef} className="overflow-x-auto overflow-y-hidden border border-border rounded-md p-2">
+    <div className="w-full max-w-[36rem]">
+      <div ref={scrollRef} className="overflow-x-auto overflow-y-hidden border border-border rounded-md p-3">
         <div
-          className="inline-grid gap-px"
+          className="inline-grid gap-0.5"
           style={{
             gridTemplateColumns: `auto repeat(${columnCount}, minmax(0, 1fr))`,
           }}
@@ -69,10 +69,10 @@ function ScoreOverviewInner({ performers, totalPatterns, scoreMode, playing }: S
             return (
               <div
                 key={`h-${i}`}
-                className="flex items-end justify-center h-3"
+                className="flex items-end justify-center h-4"
               >
                 {showLabel && (
-                  <span className="text-[9px] text-muted-foreground leading-none">{colNum}</span>
+                  <span className="text-[11px] text-muted-foreground leading-none">{colNum}</span>
                 )}
               </div>
             );
@@ -82,8 +82,8 @@ function ScoreOverviewInner({ performers, totalPatterns, scoreMode, playing }: S
           {performers.map((performer) => (
             <React.Fragment key={performer.id}>
               {/* Row label */}
-              <div className="flex items-center pr-1.5">
-                <span className="text-[10px] text-muted-foreground leading-none whitespace-nowrap">
+              <div className="flex items-center pr-2">
+                <span className="text-xs text-muted-foreground leading-none whitespace-nowrap">
                   P{performer.id + 1}
                 </span>
               </div>
@@ -95,7 +95,7 @@ function ScoreOverviewInner({ performers, totalPatterns, scoreMode, playing }: S
                   <div
                     key={`${performer.id}-${i}`}
                     data-col={colNum}
-                    className={`w-2.5 h-2.5 rounded-sm transition-colors duration-150 ${
+                    className={`w-2 h-2 rounded-sm transition-colors duration-150 ${
                       isActive ? 'bg-foreground' : 'bg-muted'
                     }`}
                   />

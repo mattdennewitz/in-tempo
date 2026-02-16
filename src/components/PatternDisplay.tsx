@@ -1,5 +1,6 @@
 import type { PerformerState } from '../audio/types.ts';
 import { cn } from '@/lib/utils';
+import { Progress } from '@/components/ui/progress';
 
 const CARD = 'w-[8.5rem] h-8 flex items-center gap-1.5 px-2 border rounded text-sm tabular-nums transition-opacity duration-300';
 
@@ -87,11 +88,14 @@ export function PatternDisplay({
               )}
               <span className="text-muted-foreground font-medium w-[1.8em] shrink-0">P{index + 1}</span>
               <span className="truncate">
-                {status === 'complete' ? 'Done' : status === 'silent' ? '...' : `${performer!.currentPattern}/${totalPatterns}`}
+                {status === 'complete' ? 'Done' : status === 'silent' ? 'Resting' : `${performer!.currentPattern}/${totalPatterns}`}
               </span>
-              <span className="text-muted-foreground text-xs ml-auto shrink-0">
-                {status === 'complete' || status === 'silent' ? '' : `${performer!.currentRep}/${performer!.totalReps}`}
-              </span>
+              {status === 'playing' && performer!.totalReps > 0 && (
+                <Progress
+                  value={(performer!.currentRep / performer!.totalReps) * 100}
+                  className="h-1.5 flex-1 min-w-0 ml-auto"
+                />
+              )}
             </div>
           );
         })}
