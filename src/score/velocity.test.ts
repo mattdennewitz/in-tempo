@@ -197,19 +197,19 @@ describe('intensityScale', () => {
 // ---------------------------------------------------------------------------
 
 describe('generateVelocityPersonality', () => {
-  it('generates baseLoudness in [0.7, 1.0]', () => {
+  it('generates baseLoudness in [0.35, 1.0]', () => {
     for (let i = 0; i < 100; i++) {
       const p = generateVelocityPersonality();
-      expect(p.baseLoudness).toBeGreaterThanOrEqual(0.7);
+      expect(p.baseLoudness).toBeGreaterThanOrEqual(0.35);
       expect(p.baseLoudness).toBeLessThanOrEqual(1.0);
     }
   });
 
-  it('generates jitterAmount in [0.02, 0.12]', () => {
+  it('generates jitterAmount in [0.1, 0.4]', () => {
     for (let i = 0; i < 100; i++) {
       const p = generateVelocityPersonality();
-      expect(p.jitterAmount).toBeGreaterThanOrEqual(0.02);
-      expect(p.jitterAmount).toBeLessThanOrEqual(0.12);
+      expect(p.jitterAmount).toBeGreaterThanOrEqual(0.1);
+      expect(p.jitterAmount).toBeLessThanOrEqual(0.4);
     }
   });
 });

@@ -34,6 +34,8 @@ const INITIAL_STATE: EnsembleEngineState = {
   performerCount: 4,
   humanizationEnabled: false,
   humanizationIntensity: 'moderate',
+  velocityEnabled: false,
+  velocityIntensity: 'moderate',
   hasRecording: false,
   seed: 0,
   advanceWeight: 0.3,
@@ -171,6 +173,14 @@ function App() {
     engineRef.current.setHumanizationIntensity(intensity);
   }, []);
 
+  const handleVelocityToggle = useCallback(() => {
+    engineRef.current.setVelocityVariation(!engineState.velocityEnabled);
+  }, [engineState.velocityEnabled]);
+
+  const handleVelocityIntensityChange = useCallback((intensity: 'subtle' | 'moderate' | 'expressive') => {
+    engineRef.current.setVelocityVariationIntensity(intensity);
+  }, []);
+
   const handleExport = useCallback(() => {
     engineRef.current.exportMidi();
   }, []);
@@ -284,15 +294,31 @@ function App() {
 
               <Separator />
 
-              {/* Humanization */}
+              {/* Timing */}
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Humanization</label>
+                <label className="text-xs font-medium text-muted-foreground">Timing</label>
                 <p className="text-[11px] text-muted-foreground/70 mb-1.5">Add natural timing variation</p>
                 <HumanizationToggle
                   enabled={engineState.humanizationEnabled}
                   intensity={engineState.humanizationIntensity}
                   onToggle={handleHumanizationToggle}
                   onIntensityChange={handleIntensityChange}
+                  label="Timing"
+                />
+              </div>
+
+              <Separator />
+
+              {/* Dynamics */}
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Dynamics</label>
+                <p className="text-[11px] text-muted-foreground/70 mb-1.5">Add velocity variation per note</p>
+                <HumanizationToggle
+                  enabled={engineState.velocityEnabled}
+                  intensity={engineState.velocityIntensity}
+                  onToggle={handleVelocityToggle}
+                  onIntensityChange={handleVelocityIntensityChange}
+                  label="Dynamics"
                 />
               </div>
 

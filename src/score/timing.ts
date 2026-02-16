@@ -15,7 +15,12 @@
 // ---------------------------------------------------------------------------
 
 import { SeededRng } from './rng.ts';
-import { intensityScale, type VelocityConfig } from './velocity.ts';
+import { intensityScale } from './velocity.ts';
+
+export interface TimingConfig {
+  enabled: boolean;
+  intensity: 'subtle' | 'moderate' | 'expressive';
+}
 
 export interface TimingPersonality {
   rushDragBias: number;    // -1.0 to +1.0, typically generated in [-0.3, +0.3]
@@ -27,7 +32,7 @@ export interface TimingContext {
   noteIndexInPattern: number;      // position within pattern (reserved for future use)
   personality: TimingPersonality;   // per-performer rush/drag bias
   density: number;                  // ensemble density 0.0-1.0
-  config: VelocityConfig;          // shared humanization toggle + intensity
+  config: TimingConfig;             // timing humanization toggle + intensity
   secondsPerEighth: number;        // needed to convert swing fraction to seconds
 }
 

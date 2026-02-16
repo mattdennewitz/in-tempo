@@ -69,7 +69,7 @@ function phraseContour(
   const progress = (currentRep - 1) / (totalReps - 1); // 0.0 to 1.0
   const peak = 0.6;
   const curve = 1.0 - Math.pow((progress - peak) / 0.6, 2);
-  const maxDeviation = 0.15 * scale;
+  const maxDeviation = 0.25 * scale;
   return 1.0 + curve * maxDeviation;
 }
 
@@ -93,7 +93,7 @@ export function computeVelocity(ctx: VelocityContext, rng?: SeededRng): number {
 
   // Layer 3: Metric accent (first note of pattern iteration gets boost)
   const accent =
-    ctx.noteIndexInPattern === 0 ? 1.0 + 0.08 * scale : 1.0;
+    ctx.noteIndexInPattern === 0 ? 1.0 + 0.15 * scale : 1.0;
 
   // Layer 4: Phrase contour (bell curve across repetitions)
   const contour = phraseContour(ctx.currentRep, ctx.totalReps, scale);
@@ -107,7 +107,7 @@ export function computeVelocity(ctx: VelocityContext, rng?: SeededRng): number {
 export function generateVelocityPersonality(rng?: SeededRng): VelocityPersonality {
   const _rng = rng ?? new SeededRng(Date.now() & 0xffffffff);
   return {
-    baseLoudness: 0.7 + _rng.random() * 0.3, // [0.7, 1.0)
-    jitterAmount: 0.02 + _rng.random() * 0.1, // [0.02, 0.12)
+    baseLoudness: 0.35 + _rng.random() * 0.65, // [0.35, 1.0)
+    jitterAmount: 0.1 + _rng.random() * 0.3, // [0.1, 0.4)
   };
 }

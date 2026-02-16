@@ -7,6 +7,7 @@
  * Completely framework-agnostic: no React imports, no DOM access.
  */
 import type { EnsembleEngineState, ScoreMode, Pattern, VelocityConfig } from './types.ts';
+import type { TimingConfig } from '../score/timing.ts';
 import { VoicePool } from './voice-pool.ts';
 import { Scheduler } from './scheduler.ts';
 import { SamplePlayer } from './sampler.ts';
@@ -32,6 +33,7 @@ export class AudioEngine {
   private currentMode: ScoreMode = 'riley';
   private currentPatterns: Pattern[] = PATTERNS;
   private velocityConfig: VelocityConfig = { enabled: false, intensity: 'moderate' };
+  private timingConfig: TimingConfig = { enabled: false, intensity: 'moderate' };
   private midiRecorder: MidiRecorder = new MidiRecorder();
   private currentSeed: number = 0;
   private _advanceWeight: number = 0.3;
@@ -68,7 +70,7 @@ export class AudioEngine {
     const rng = new SeededRng(this.currentSeed);
     this.currentPatterns = getPatternsForMode(this.currentMode, rng);
 
-    this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode, this.velocityConfig, rng);
+    this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode, this.velocityConfig, rng, this.timingConfig);
     this.voicePool = new VoicePool(this.audioContext, this.initialPerformerCount * 2);
 
     // Compute pan positions AFTER Ensemble (preserves existing RNG sequence)
@@ -93,6 +95,7 @@ export class AudioEngine {
       this.pulseGenerator,
     );
     this.scheduler.velocityConfigRef = { current: this.velocityConfig };
+    this.scheduler.timingConfigRef = { current: this.timingConfig };
     this.scheduler.midiRecorder = this.midiRecorder;
     this.scheduler.performerPanNodes = this.performerPanNodes;
     this.scheduler.performerPanValues = this.performerPanValues;
@@ -201,7 +204,7 @@ export class AudioEngine {
     // Assign pan position filling the largest gap among existing positions
     const existingPans = Array.from(this.performerPanValues.values()).sort((a, b) => a - b);
     const newPan = this.findLargestGapMidpoint(existingPans);
-    const panNode = createPerformerPanNode(this.audioContext!, newPan, this.audioContext!.destination);
+    const panNode = createPerformerPanNode(this.audioContext!, newPan, this.voicePool!.outputNode);
     this.performerPanNodes.set(id, panNode);
     this.performerPanValues.set(id, newPan);
 
@@ -298,7 +301,7 @@ export class AudioEngine {
       }
       const rng = new SeededRng(this.currentSeed);
       this.currentPatterns = getPatternsForMode(this.currentMode, rng);
-      this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode, this.velocityConfig, rng);
+      this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode, this.velocityConfig, rng, this.timingConfig);
 
       // Recompute pan positions AFTER Ensemble
       this.setupPanNodes(this.initialPerformerCount, rng);
@@ -320,6 +323,7 @@ export class AudioEngine {
         this.pulseGenerator!,
       );
       this.scheduler.velocityConfigRef = { current: this.velocityConfig };
+    this.scheduler.timingConfigRef = { current: this.timingConfig };
       this.scheduler.midiRecorder = this.midiRecorder;
       this.scheduler.performerPanNodes = this.performerPanNodes;
       this.scheduler.performerPanValues = this.performerPanValues;
@@ -355,8 +359,28 @@ export class AudioEngine {
     return this.midiRecorder.eventCount > 0;
   }
 
-  /** Enable or disable velocity humanization. */
+  /** Enable or disable timing humanization. */
   setHumanization(enabled: boolean): void {
+    this.timingConfig = { ...this.timingConfig, enabled };
+    this.ensemble?.setTimingConfig(this.timingConfig);
+    if (this.scheduler) {
+      this.scheduler.timingConfigRef = { current: this.timingConfig };
+      this.scheduler.fireStateChange();
+    }
+  }
+
+  /** Set timing humanization intensity level. */
+  setHumanizationIntensity(intensity: 'subtle' | 'moderate' | 'expressive'): void {
+    this.timingConfig = { ...this.timingConfig, intensity };
+    this.ensemble?.setTimingConfig(this.timingConfig);
+    if (this.scheduler) {
+      this.scheduler.timingConfigRef = { current: this.timingConfig };
+      this.scheduler.fireStateChange();
+    }
+  }
+
+  /** Enable or disable velocity variation. */
+  setVelocityVariation(enabled: boolean): void {
     this.velocityConfig = { ...this.velocityConfig, enabled };
     this.ensemble?.setVelocityConfig(this.velocityConfig);
     if (this.scheduler) {
@@ -365,8 +389,8 @@ export class AudioEngine {
     }
   }
 
-  /** Set humanization intensity level. */
-  setHumanizationIntensity(intensity: 'subtle' | 'moderate' | 'expressive'): void {
+  /** Set velocity variation intensity level. */
+  setVelocityVariationIntensity(intensity: 'subtle' | 'moderate' | 'expressive'): void {
     this.velocityConfig = { ...this.velocityConfig, intensity };
     this.ensemble?.setVelocityConfig(this.velocityConfig);
     if (this.scheduler) {
@@ -397,8 +421,10 @@ export class AudioEngine {
       scoreMode: this.currentMode,
       pulseEnabled: false,
       performerCount: this.initialPerformerCount,
-      humanizationEnabled: this.velocityConfig.enabled,
-      humanizationIntensity: this.velocityConfig.intensity,
+      humanizationEnabled: this.timingConfig.enabled,
+      humanizationIntensity: this.timingConfig.intensity,
+      velocityEnabled: this.velocityConfig.enabled,
+      velocityIntensity: this.velocityConfig.intensity,
       hasRecording: false,
       seed: 0,
       advanceWeight: this._advanceWeight,
@@ -432,7 +458,7 @@ export class AudioEngine {
       this.voicePool?.stopAll();
 
       // Rebuild ensemble and scheduler with new patterns
-      this.ensemble = new Ensemble(this.performerCount, this.currentPatterns, mode, this.velocityConfig, rng);
+      this.ensemble = new Ensemble(this.performerCount, this.currentPatterns, mode, this.velocityConfig, rng, this.timingConfig);
 
       // Recompute pan positions AFTER Ensemble
       this.setupPanNodes(this.performerCount, rng);
@@ -454,6 +480,7 @@ export class AudioEngine {
         this.pulseGenerator!,
       );
       this.scheduler.velocityConfigRef = { current: this.velocityConfig };
+    this.scheduler.timingConfigRef = { current: this.timingConfig };
       this.scheduler.midiRecorder = this.midiRecorder;
       this.scheduler.performerPanNodes = this.performerPanNodes;
       this.scheduler.performerPanValues = this.performerPanValues;

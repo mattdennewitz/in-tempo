@@ -11,6 +11,7 @@
  * - TIMER_INTERVAL: 25ms setTimeout interval (4 chances per window)
  */
 import type { EnsembleEngineState, VelocityConfig } from './types.ts';
+import type { TimingConfig } from '../score/timing.ts';
 import type { VoicePool } from './voice-pool.ts';
 import type { Ensemble } from '../score/ensemble.ts';
 import type { SamplePlayer } from './sampler.ts';
@@ -39,6 +40,7 @@ export class Scheduler {
 
   onStateChange: ((state: EnsembleEngineState) => void) | null = null;
   velocityConfigRef: { current: VelocityConfig } = { current: { enabled: true, intensity: 'moderate' } };
+  timingConfigRef: { current: TimingConfig } = { current: { enabled: true, intensity: 'moderate' } };
   midiRecorder: MidiRecorder | null = null;
 
   // Stereo spread: per-performer pan routing (set by Engine)
@@ -113,6 +115,7 @@ export class Scheduler {
   /** Get current ensemble engine state. */
   getState(): EnsembleEngineState {
     const vc = this.velocityConfigRef.current;
+    const tc = this.timingConfigRef.current;
     return {
       playing: this._playing,
       bpm: this._bpm,
@@ -125,8 +128,10 @@ export class Scheduler {
       scoreMode: this.ensemble.scoreMode,
       pulseEnabled: this.pulseGenerator.enabled,
       performerCount: this.ensemble.agentCount,
-      humanizationEnabled: vc.enabled,
-      humanizationIntensity: vc.intensity,
+      humanizationEnabled: tc.enabled,
+      humanizationIntensity: tc.intensity,
+      velocityEnabled: vc.enabled,
+      velocityIntensity: vc.intensity,
       hasRecording: (this.midiRecorder?.eventCount ?? 0) > 0,
       seed: 0, // Engine overlays actual seed value
       advanceWeight: 0.3, // Engine overlays actual value

@@ -28,6 +28,7 @@ import {
   computeRubatoMultiplier,
   advanceRubato,
   generateTimingPersonality,
+  type TimingConfig,
   type TimingContext,
   type RubatoState,
 } from './timing.ts';
@@ -246,6 +247,7 @@ export class PerformerAgent {
   private finalPatternIndex: number;
   private bandWidth: number;
   private velocityConfig: VelocityConfig;
+  private timingConfig: TimingConfig;
   private rng: SeededRng;
   private _advanceWeight: number = 0.3;
 
@@ -257,11 +259,13 @@ export class PerformerAgent {
     bandWidth?: number,
     velocityConfig?: VelocityConfig,
     rng?: SeededRng,
+    timingConfig?: TimingConfig,
   ) {
     this.patterns = patterns;
     this.finalPatternIndex = finalPatternIndex ?? patterns.length - 1;
     this.bandWidth = bandWidth ?? 3;
     this.velocityConfig = velocityConfig ?? { enabled: true, intensity: 'moderate' };
+    this.timingConfig = timingConfig ?? { enabled: true, intensity: 'moderate' };
     this.rng = rng ?? new SeededRng(Date.now() & 0xffffffff);
     const reps = this.randomReps();
     this._state = {
@@ -378,7 +382,7 @@ export class PerformerAgent {
         timingJitter: s.personality.timingJitter,
       },
       density: snapshot.density,
-      config: this.velocityConfig,
+      config: this.timingConfig,
       secondsPerEighth,
     };
 
@@ -541,6 +545,10 @@ export class PerformerAgent {
     this.velocityConfig = config;
   }
 
+  setTimingConfig(config: TimingConfig): void {
+    this.timingConfig = config;
+  }
+
   setAdvanceWeight(weight: number): void {
     this._advanceWeight = weight;
   }
@@ -584,6 +592,7 @@ export class Ensemble {
   private nextId: number;
   private pendingRemovals: Set<number> = new Set();
   private velocityConfig: VelocityConfig;
+  private timingConfig: TimingConfig;
   private rng: SeededRng;
   private rubatoState: RubatoState;
   private _lastRubatoMultiplier: number = 1.0;
@@ -594,6 +603,7 @@ export class Ensemble {
     mode: ScoreMode = 'riley',
     velocityConfig: VelocityConfig = { enabled: true, intensity: 'moderate' },
     rng?: SeededRng,
+    timingConfig: TimingConfig = { enabled: true, intensity: 'moderate' },
   ) {
     this._scoreMode = mode;
     this._patterns = patterns;
@@ -602,6 +612,7 @@ export class Ensemble {
     this.agents = [];
     this.nextId = count;
     this.velocityConfig = velocityConfig;
+    this.timingConfig = timingConfig;
     this.rng = rng ?? new SeededRng(Date.now() & 0xffffffff);
     this.rubatoState = { phase: 0, period: this.rng.int(16, 32) };
 
@@ -610,7 +621,7 @@ export class Ensemble {
     let cumulativeDelay = 0;
     for (let i = 0; i < count; i++) {
       const agent = new PerformerAgent(
-        i, patterns, undefined, this.finalPatternIndex, this.bandWidth, this.velocityConfig, this.rng
+        i, patterns, undefined, this.finalPatternIndex, this.bandWidth, this.velocityConfig, this.rng, this.timingConfig
       );
       agent._mutableState.entryDelay = cumulativeDelay;
       cumulativeDelay += this.rng.int(2, 4); // 2-4 beats
@@ -642,7 +653,7 @@ export class Ensemble {
     // Compute rubato multiplier for this tick, then advance phase
     this._lastRubatoMultiplier = computeRubatoMultiplier(
       this.rubatoState,
-      intensityScale(this.velocityConfig.intensity) * (this.velocityConfig.enabled ? 1.0 : 0.0),
+      intensityScale(this.timingConfig.intensity) * (this.timingConfig.enabled ? 1.0 : 0.0),
     );
     this.rubatoState = advanceRubato(this.rubatoState);
 
@@ -690,7 +701,7 @@ export class Ensemble {
   /** Add a new agent that blends into the current musical position. Returns the new agent's id. */
   addAgent(): number {
     const id = this.nextId++;
-    const agent = new PerformerAgent(id, this._patterns, undefined, this.finalPatternIndex, this.bandWidth, this.velocityConfig, this.rng);
+    const agent = new PerformerAgent(id, this._patterns, undefined, this.finalPatternIndex, this.bandWidth, this.velocityConfig, this.rng, this.timingConfig);
 
     // Start at current ensemble minimum pattern so the new performer blends in
     const snapshot = this.createSnapshot();
@@ -707,6 +718,14 @@ export class Ensemble {
     this.velocityConfig = config;
     for (const agent of this.agents) {
       agent.setVelocityConfig(config);
+    }
+  }
+
+  /** Update timing config on ensemble and all agents. */
+  setTimingConfig(config: TimingConfig): void {
+    this.timingConfig = config;
+    for (const agent of this.agents) {
+      agent.setTimingConfig(config);
     }
   }
 

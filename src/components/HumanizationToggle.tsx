@@ -3,6 +3,7 @@ interface HumanizationToggleProps {
   intensity: 'subtle' | 'moderate' | 'expressive';
   onToggle: () => void;
   onIntensityChange: (intensity: 'subtle' | 'moderate' | 'expressive') => void;
+  label?: string;
 }
 
 type Intensity = HumanizationToggleProps['intensity'];
@@ -19,6 +20,7 @@ export function HumanizationToggle({
   intensity,
   onToggle,
   onIntensityChange,
+  label = 'Humanization',
 }: HumanizationToggleProps) {
   const current = enabled ? intensity : 'off';
 
@@ -35,7 +37,7 @@ export function HumanizationToggle({
     <select
       value={current}
       onChange={(e) => handleChange(e.target.value)}
-      aria-label="Humanization"
+      aria-label={label}
       className="h-8 rounded-md border bg-background px-2 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring/50"
     >
       {OPTIONS.map(({ value, label }) => (

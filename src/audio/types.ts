@@ -44,6 +44,8 @@ export interface EnsembleEngineState {
   performerCount: number;
   humanizationEnabled: boolean;
   humanizationIntensity: 'subtle' | 'moderate' | 'expressive';
+  velocityEnabled: boolean;
+  velocityIntensity: 'subtle' | 'moderate' | 'expressive';
   hasRecording: boolean;
   seed: number;
   advanceWeight: number;
