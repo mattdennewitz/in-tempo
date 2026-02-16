@@ -90,10 +90,11 @@ Plans:
   1. Performer cards flash or pulse visibly when a note is played
   2. Performer cards show progress within the current pattern repetition
   3. A score overview visualization shows all performers' positions across the full pattern sequence, revealing canonic phasing and convergence
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 10-01: TBD
+- [ ] 10-01-PLAN.md — Note-hit dot feedback + pattern position display on performer cards
+- [ ] 10-02-PLAN.md — Score overview grid showing all performers' positions across pattern sequence
 
 ## Progress
 
@@ -110,7 +111,7 @@ Plans:
 | 7. Seeded PRNG | v1.2 | 3/3 | Complete | 2026-02-15 |
 | 8. Microtiming | v1.2 | 2/2 | Complete | 2026-02-15 |
 | 9. Stereo Spread | v1.2 | 2/2 | Complete | 2026-02-15 |
-| 10. Pattern Visualization | v1.2 | 0/TBD | Not started | - |
+| 10. Pattern Visualization | v1.2 | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-15*
