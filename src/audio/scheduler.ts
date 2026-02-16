@@ -35,6 +35,7 @@ export class Scheduler {
   private timerId: ReturnType<typeof setTimeout> | null = null;
   private releaseTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
   private beatCounter: number = 0;
+  private lastHitMap: Map<number, number> = new Map();
 
   onStateChange: ((state: EnsembleEngineState) => void) | null = null;
   velocityConfigRef: { current: VelocityConfig } = { current: { enabled: true, intensity: 'moderate' } };
@@ -115,7 +116,10 @@ export class Scheduler {
     return {
       playing: this._playing,
       bpm: this._bpm,
-      performers: this.ensemble.performerStates,
+      performers: this.ensemble.performerStates.map(p => ({
+        ...p,
+        lastHitVelocity: this.lastHitMap.get(p.id) ?? 0,
+      })),
       ensembleComplete: this.ensemble.isComplete,
       totalPatterns: this.ensemble.totalPatterns,
       scoreMode: this.ensemble.scoreMode,
@@ -175,8 +179,15 @@ export class Scheduler {
 
     const secondsPerEighth = 60 / (this._bpm * 2);
 
+    // Clear hit map for this beat (rebuilt from scratch each beat)
+    this.lastHitMap.clear();
+
     for (const event of events) {
       if (event.midi === 0) continue;
+
+      // Track max velocity per performer for note-hit visualization
+      const current = this.lastHitMap.get(event.performerId) ?? 0;
+      this.lastHitMap.set(event.performerId, Math.max(current, event.velocity));
 
       // Apply per-note timing offset, clamped to prevent scheduling in the past
       const offsetTime = Math.max(

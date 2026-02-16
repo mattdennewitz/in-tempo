@@ -28,6 +28,7 @@ export interface PerformerState {
   currentRep: number;      // 1-based current repetition (0 when silent/complete)
   totalReps: number;       // total repetitions for current pattern (0 when silent/complete)
   instrument: InstrumentType;
+  lastHitVelocity?: number;
 }
 
 export type { VelocityConfig } from '../score/velocity.ts';
