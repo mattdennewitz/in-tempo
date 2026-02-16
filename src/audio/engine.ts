@@ -17,6 +17,7 @@ import { Ensemble } from '../score/ensemble.ts';
 import { PATTERNS } from '../score/patterns.ts';
 import { getPatternsForMode } from '../score/score-modes.ts';
 import { SeededRng } from '../score/rng.ts';
+import { computePanPositions, createPerformerPanNode } from './panner.ts';
 
 export class AudioEngine {
   private audioContext: AudioContext | null = null;
@@ -33,6 +34,11 @@ export class AudioEngine {
   private velocityConfig: VelocityConfig = { enabled: true, intensity: 'moderate' };
   private midiRecorder: MidiRecorder = new MidiRecorder();
   private currentSeed: number = 0;
+
+  // Stereo spread infrastructure
+  private performerPanNodes: Map<number, StereoPannerNode> = new Map();
+  private performerPanValues: Map<number, number> = new Map();
+  private samplePanNodes: StereoPannerNode[] = []; // [left, center, right] for disposal
 
   /** Set seed for next performance start. 0 means auto-generate. */
   setSeed(seed: number): void {
@@ -64,9 +70,16 @@ export class AudioEngine {
     this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode, this.velocityConfig, rng);
     this.voicePool = new VoicePool(this.audioContext, this.initialPerformerCount * 2);
 
-    // Initialize sampled instruments (loads from CDN)
+    // Compute pan positions AFTER Ensemble (preserves existing RNG sequence)
+    this.setupPanNodes(this.initialPerformerCount, rng);
+
+    // Initialize sampled instruments with per-group pan routing
     this.samplePlayer = new SamplePlayer(this.audioContext);
-    await this.samplePlayer.initialize();
+    await this.samplePlayer.initialize({
+      left: this.samplePanNodes[0],
+      center: this.samplePanNodes[1],
+      right: this.samplePanNodes[2],
+    });
 
     // Initialize pulse generator
     this.pulseGenerator = new PulseGenerator(this.audioContext);
@@ -80,6 +93,8 @@ export class AudioEngine {
     );
     this.scheduler.velocityConfigRef = { current: this.velocityConfig };
     this.scheduler.midiRecorder = this.midiRecorder;
+    this.scheduler.performerPanNodes = this.performerPanNodes;
+    this.scheduler.performerPanValues = this.performerPanValues;
 
     // Apply any callback that was set before initialization (wrap to overlay seed)
     if (this.pendingOnStateChange) {
@@ -91,6 +106,53 @@ export class AudioEngine {
     }
 
     this.initialized = true;
+  }
+
+  /**
+   * Set up per-performer StereoPannerNodes and per-group sample pan nodes.
+   * Must be called AFTER Ensemble creation to preserve RNG sequence.
+   */
+  private setupPanNodes(count: number, rng: SeededRng): void {
+    const ctx = this.audioContext!;
+
+    // Dispose old pan nodes
+    this.disposePanNodes();
+
+    // Compute deterministic pan positions
+    const panPositions = computePanPositions(count, rng);
+
+    // Create per-performer pan nodes
+    for (let i = 0; i < count; i++) {
+      const panNode = createPerformerPanNode(ctx, panPositions[i], ctx.destination);
+      this.performerPanNodes.set(i, panNode);
+      this.performerPanValues.set(i, panPositions[i]);
+    }
+
+    // Create 3 pan nodes for per-group sampled instrument routing (left/center/right)
+    const sampleGain = ctx.createGain();
+    sampleGain.gain.value = 0.6;
+    sampleGain.connect(ctx.destination);
+
+    const leftPan = createPerformerPanNode(ctx, -0.67, sampleGain);
+    const centerPan = createPerformerPanNode(ctx, 0, sampleGain);
+    const rightPan = createPerformerPanNode(ctx, 0.67, sampleGain);
+    this.samplePanNodes = [leftPan, centerPan, rightPan];
+  }
+
+  /**
+   * Disconnect and clear all pan nodes.
+   */
+  private disposePanNodes(): void {
+    for (const node of this.performerPanNodes.values()) {
+      node.disconnect();
+    }
+    this.performerPanNodes.clear();
+    this.performerPanValues.clear();
+
+    for (const node of this.samplePanNodes) {
+      node.disconnect();
+    }
+    this.samplePanNodes = [];
   }
 
   /**
@@ -132,9 +194,59 @@ export class AudioEngine {
     if (!this.initialized || !this.ensemble || !this.voicePool) return null;
     const id = this.ensemble.addAgent();
     this.voicePool.resize(this.ensemble.agentCount * 2);
+
+    // Assign pan position filling the largest gap among existing positions
+    const existingPans = Array.from(this.performerPanValues.values()).sort((a, b) => a - b);
+    const newPan = this.findLargestGapMidpoint(existingPans);
+    const panNode = createPerformerPanNode(this.audioContext!, newPan, this.audioContext!.destination);
+    this.performerPanNodes.set(id, panNode);
+    this.performerPanValues.set(id, newPan);
+
+    // Update scheduler references
+    if (this.scheduler) {
+      this.scheduler.performerPanNodes = this.performerPanNodes;
+      this.scheduler.performerPanValues = this.performerPanValues;
+    }
+
     // Fire state change so UI updates
     this.scheduler?.fireStateChange();
     return id;
+  }
+
+  /**
+   * Find the midpoint of the largest gap in the stereo field.
+   * Includes implicit boundaries at -1 and +1.
+   */
+  private findLargestGapMidpoint(sortedPans: number[]): number {
+    if (sortedPans.length === 0) return 0;
+
+    let maxGap = 0;
+    let gapMid = 0;
+
+    // Check gap from -1 to first position
+    const leftGap = (sortedPans[0] - (-1));
+    if (leftGap > maxGap) {
+      maxGap = leftGap;
+      gapMid = -1 + leftGap / 2;
+    }
+
+    // Check gaps between adjacent positions
+    for (let i = 0; i < sortedPans.length - 1; i++) {
+      const gap = sortedPans[i + 1] - sortedPans[i];
+      if (gap > maxGap) {
+        maxGap = gap;
+        gapMid = sortedPans[i] + gap / 2;
+      }
+    }
+
+    // Check gap from last position to +1
+    const rightGap = 1 - sortedPans[sortedPans.length - 1];
+    if (rightGap > maxGap) {
+      maxGap = rightGap;
+      gapMid = sortedPans[sortedPans.length - 1] + rightGap / 2;
+    }
+
+    return parseFloat(gapMid.toFixed(4));
   }
 
   /** Remove a performer by id. Returns false if not initialized or performer not found. */
@@ -142,6 +254,20 @@ export class AudioEngine {
     if (!this.initialized || !this.ensemble) return false;
     const result = this.ensemble.removeAgent(id);
     if (result) {
+      // Disconnect and remove the performer's pan node
+      const panNode = this.performerPanNodes.get(id);
+      if (panNode) {
+        panNode.disconnect();
+        this.performerPanNodes.delete(id);
+        this.performerPanValues.delete(id);
+      }
+
+      // Update scheduler references
+      if (this.scheduler) {
+        this.scheduler.performerPanNodes = this.performerPanNodes;
+        this.scheduler.performerPanValues = this.performerPanValues;
+      }
+
       // Voice pool does NOT shrink (excess voices stay available -- avoids glitches)
       this.scheduler?.fireStateChange();
     }
@@ -170,6 +296,19 @@ export class AudioEngine {
       const rng = new SeededRng(this.currentSeed);
       this.currentPatterns = getPatternsForMode(this.currentMode, rng);
       this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode, this.velocityConfig, rng);
+
+      // Recompute pan positions AFTER Ensemble
+      this.setupPanNodes(this.initialPerformerCount, rng);
+
+      // Reinitialize sampled instruments with new pan groups
+      this.samplePlayer?.dispose();
+      this.samplePlayer = new SamplePlayer(this.audioContext!);
+      this.samplePlayer.initialize({
+        left: this.samplePanNodes[0],
+        center: this.samplePanNodes[1],
+        right: this.samplePanNodes[2],
+      });
+
       this.scheduler = new Scheduler(
         this.audioContext!,
         this.voicePool!,
@@ -179,6 +318,8 @@ export class AudioEngine {
       );
       this.scheduler.velocityConfigRef = { current: this.velocityConfig };
       this.scheduler.midiRecorder = this.midiRecorder;
+      this.scheduler.performerPanNodes = this.performerPanNodes;
+      this.scheduler.performerPanValues = this.performerPanValues;
       if (callback) {
         this.scheduler.onStateChange = (state) => {
           state.seed = this.currentSeed;
@@ -276,15 +417,30 @@ export class AudioEngine {
 
       // Rebuild ensemble and scheduler with new patterns
       this.ensemble = new Ensemble(this.performerCount, this.currentPatterns, mode, this.velocityConfig, rng);
+
+      // Recompute pan positions AFTER Ensemble
+      this.setupPanNodes(this.performerCount, rng);
+
+      // Reinitialize sampled instruments with new pan groups
+      this.samplePlayer?.dispose();
+      this.samplePlayer = new SamplePlayer(this.audioContext!);
+      this.samplePlayer.initialize({
+        left: this.samplePanNodes[0],
+        center: this.samplePanNodes[1],
+        right: this.samplePanNodes[2],
+      });
+
       this.scheduler = new Scheduler(
         this.audioContext!,
         this.voicePool!,
         this.ensemble,
-        this.samplePlayer!,
+        this.samplePlayer,
         this.pulseGenerator!,
       );
       this.scheduler.velocityConfigRef = { current: this.velocityConfig };
       this.scheduler.midiRecorder = this.midiRecorder;
+      this.scheduler.performerPanNodes = this.performerPanNodes;
+      this.scheduler.performerPanValues = this.performerPanValues;
 
       // Reconnect callback (wrapped to overlay seed) and fire state change
       if (callback) {
@@ -328,6 +484,7 @@ export class AudioEngine {
     this.voicePool?.dispose();
     this.samplePlayer?.dispose();
     this.pulseGenerator?.dispose();
+    this.disposePanNodes();
     if (this.audioContext && this.audioContext.state !== 'closed') {
       this.audioContext.close();
     }

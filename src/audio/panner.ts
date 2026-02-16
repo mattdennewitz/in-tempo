@@ -7,7 +7,7 @@
  * always produces the same pan layout.
  */
 
-import { SeededRng } from '../score/rng';
+import type { SeededRng } from '../score/rng';
 
 /**
  * Compute pan positions for `count` performers, evenly distributed from -1 to +1.
@@ -36,4 +36,23 @@ export function computePanPositions(count: number, rng: SeededRng): number[] {
   }
 
   return slots;
+}
+
+/**
+ * Create a StereoPannerNode for a performer at a specific pan position.
+ *
+ * @param audioContext - The AudioContext to create the node in
+ * @param panValue - Pan position from -1 (left) to +1 (right)
+ * @param destination - The AudioNode to connect the panner output to
+ * @returns A StereoPannerNode connected to the destination
+ */
+export function createPerformerPanNode(
+  audioContext: AudioContext,
+  panValue: number,
+  destination: AudioNode,
+): StereoPannerNode {
+  const panner = audioContext.createStereoPanner();
+  panner.pan.value = panValue;
+  panner.connect(destination);
+  return panner;
 }
