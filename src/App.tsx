@@ -25,7 +25,7 @@ import './App.css';
 
 const INITIAL_STATE: EnsembleEngineState = {
   playing: false,
-  bpm: 120,
+  bpm: 140,
   performers: [],
   ensembleComplete: false,
   totalPatterns: 53,
