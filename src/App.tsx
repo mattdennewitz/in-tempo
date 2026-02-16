@@ -207,21 +207,14 @@ function App() {
     <div className="min-h-screen flex flex-col">
       {/* Top bar */}
       <header className="grid grid-cols-[1fr_auto_1fr] items-center border-b px-4 py-2">
-        <div />
-        <Transport
-          playing={engineState.playing}
-          onStart={handleStart}
-          onStop={handleStop}
-          onReset={handleReset}
-        />
         <Sheet>
           <SheetTrigger asChild>
-            <Button variant="outline" size="sm" aria-label="Open controls" className="justify-self-end">
+            <Button variant="outline" size="sm" aria-label="Open controls" className="justify-self-start">
               <Settings2 />
               Controls
             </Button>
           </SheetTrigger>
-          <SheetContent side="right" className="overflow-y-auto">
+          <SheetContent side="left" className="overflow-y-auto">
             <SheetHeader>
               <SheetTitle>Controls</SheetTitle>
               <SheetDescription>Configure the performance</SheetDescription>
@@ -335,6 +328,13 @@ function App() {
             </div>
           </SheetContent>
         </Sheet>
+        <Transport
+          playing={engineState.playing}
+          onStart={handleStart}
+          onStop={handleStop}
+          onReset={handleReset}
+        />
+        <div />
       </header>
 
       {/* Performer visualization */}
