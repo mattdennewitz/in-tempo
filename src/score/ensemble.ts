@@ -118,12 +118,14 @@ export function weightedChoice<T>(
 
 export function computeWeights(
   agent: AgentState,
-  snapshot: EnsembleSnapshot
+  snapshot: EnsembleSnapshot,
+  baseAdvance: number = 0.3,
 ): { advance: number; repeat: number; dropout: number } {
-  // Base weights
-  let advance = 0.3;
-  let repeat = 0.5;
-  let dropout = 0.2;
+  // Base weights — advance is user-configurable, others scale to fill remainder
+  const remainder = 1.0 - baseAdvance;
+  let advance = baseAdvance;
+  let repeat = remainder * (5 / 7);   // ~71% of remainder
+  let dropout = remainder * (2 / 7);  // ~29% of remainder
 
   const playing = snapshot.performers.filter(p => p.status === 'playing');
 
@@ -245,6 +247,7 @@ export class PerformerAgent {
   private bandWidth: number;
   private velocityConfig: VelocityConfig;
   private rng: SeededRng;
+  private _advanceWeight: number = 0.3;
 
   constructor(
     id: number,
@@ -398,7 +401,7 @@ export class PerformerAgent {
     }
 
     // Compute weights and make choice
-    const weights = computeWeights(s, snapshot);
+    const weights = computeWeights(s, snapshot, this._advanceWeight);
     let decision = weightedChoice<Decision>([
       { value: 'advance', weight: weights.advance },
       { value: 'repeat', weight: weights.repeat },
@@ -536,6 +539,10 @@ export class PerformerAgent {
 
   setVelocityConfig(config: VelocityConfig): void {
     this.velocityConfig = config;
+  }
+
+  setAdvanceWeight(weight: number): void {
+    this._advanceWeight = weight;
   }
 
   get state(): AgentState {
@@ -700,6 +707,13 @@ export class Ensemble {
     this.velocityConfig = config;
     for (const agent of this.agents) {
       agent.setVelocityConfig(config);
+    }
+  }
+
+  /** Update advance weight on all agents. */
+  setAdvanceWeight(weight: number): void {
+    for (const agent of this.agents) {
+      agent.setAdvanceWeight(weight);
     }
   }
 

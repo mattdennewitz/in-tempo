@@ -1,13 +1,14 @@
 import { useState, useCallback } from 'react';
+import { Copy, Link } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface SeedDisplayProps {
-  seed: number;           // Current seed (0 = not yet generated)
-  playing: boolean;       // Whether performance is active
-  onSeedChange: (seed: number) => void;  // User enters a seed
-  mode: string;           // Current score mode
-  bpm: number;            // Current BPM
-  performerCount: number; // Current performer count
+  seed: number;
+  playing: boolean;
+  onSeedChange: (seed: number) => void;
+  mode: string;
+  bpm: number;
+  performerCount: number;
 }
 
 export function SeedDisplay({ seed, playing, onSeedChange, mode, bpm, performerCount }: SeedDisplayProps) {
@@ -53,55 +54,53 @@ export function SeedDisplay({ seed, playing, onSeedChange, mode, bpm, performerC
   }, [handleSubmit]);
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="space-y-2">
+      {/* Current seed + actions */}
       <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">Seed:</span>
-        {seed > 0 ? (
-          <span className="font-mono text-sm tabular-nums">{seed}</span>
-        ) : (
-          <span className="text-sm text-muted-foreground italic">random</span>
-        )}
+        <span className="text-sm tabular-nums font-mono min-w-0 truncate">
+          {seed > 0 ? seed : <span className="text-muted-foreground italic font-sans">random</span>}
+        </span>
         {copyFeedback && (
-          <span className="text-xs text-green-600 dark:text-green-400">{copyFeedback}</span>
+          <span className="text-xs text-green-600 dark:text-green-400 shrink-0">{copyFeedback}</span>
         )}
-      </div>
-
-      <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="xs"
-          onClick={handleCopySeed}
-          disabled={seed === 0}
-          aria-label="Copy seed to clipboard"
-        >
-          Copy
-        </Button>
-        <Button
-          variant="outline"
-          size="xs"
-          onClick={handleCopyLink}
-          disabled={seed === 0}
-          aria-label="Copy shareable link to clipboard"
-        >
-          Share
-        </Button>
-      </div>
-
-      {!playing && (
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            placeholder="Enter seed..."
-            value={inputValue}
-            onChange={e => setInputValue(e.target.value)}
-            onBlur={handleSubmit}
-            onKeyDown={handleKeyDown}
-            className="h-6 w-28 rounded-md border bg-background px-2 text-xs font-mono shadow-xs focus:outline-none focus:ring-2 focus:ring-ring/50"
-            aria-label="Enter seed for replay"
-          />
+        <div className="flex items-center gap-1.5 ml-auto shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleCopySeed}
+            disabled={seed === 0}
+            aria-label="Copy seed to clipboard"
+          >
+            <Copy className="size-3.5" />
+            Copy
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleCopyLink}
+            disabled={seed === 0}
+            aria-label="Copy shareable link to clipboard"
+          >
+            <Link className="size-3.5" />
+            Share
+          </Button>
         </div>
+      </div>
+
+      {/* Seed input (pre-playback only) */}
+      {!playing && (
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          placeholder="Paste a seed to replay..."
+          value={inputValue}
+          onChange={e => setInputValue(e.target.value)}
+          onBlur={handleSubmit}
+          onKeyDown={handleKeyDown}
+          className="h-8 w-full rounded-md border bg-background px-3 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring/50"
+          aria-label="Enter seed for replay"
+        />
       )}
     </div>
   );
