@@ -34,6 +34,7 @@ export class AudioEngine {
   private velocityConfig: VelocityConfig = { enabled: true, intensity: 'moderate' };
   private midiRecorder: MidiRecorder = new MidiRecorder();
   private currentSeed: number = 0;
+  private _advanceWeight: number = 0.3;
 
   // Stereo spread infrastructure
   private performerPanNodes: Map<number, StereoPannerNode> = new Map();
@@ -372,6 +373,17 @@ export class AudioEngine {
     }
   }
 
+  /** Set the base advance weight (probability of changing patterns). */
+  setAdvanceWeight(weight: number): void {
+    this._advanceWeight = weight;
+    this.ensemble?.setAdvanceWeight(weight);
+    if (this.scheduler) {
+      this.scheduler.fireStateChange();
+    } else if (this.pendingOnStateChange) {
+      this.pendingOnStateChange(this.getState());
+    }
+  }
+
   /** Get current ensemble engine state. */
   getState(): EnsembleEngineState {
     const base = this.scheduler?.getState() ?? {
@@ -387,9 +399,11 @@ export class AudioEngine {
       humanizationIntensity: this.velocityConfig.intensity,
       hasRecording: false,
       seed: 0,
+      advanceWeight: this._advanceWeight,
     };
-    // Engine owns the seed -- overlay it on scheduler state
+    // Engine owns the seed and advanceWeight -- overlay on scheduler state
     base.seed = this.currentSeed;
+    base.advanceWeight = this._advanceWeight;
     return base;
   }
 

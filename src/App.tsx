@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
+import { Settings2 } from 'lucide-react';
 import { AudioEngine } from './audio/engine.ts';
 import type { EnsembleEngineState, ScoreMode } from './audio/types.ts';
 import { ScoreModeSelector } from './components/ScoreModeSelector.tsx';
@@ -9,6 +10,16 @@ import { PerformerControls } from './components/PerformerControls.tsx';
 import { HumanizationToggle } from './components/HumanizationToggle.tsx';
 import { ExportButton } from './components/ExportButton.tsx';
 import { SeedDisplay } from './components/SeedDisplay.tsx';
+import { Button } from './components/ui/button.tsx';
+import { Separator } from './components/ui/separator.tsx';
+import {
+  Sheet,
+  SheetTrigger,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from './components/ui/sheet.tsx';
 import './App.css';
 
 const INITIAL_STATE: EnsembleEngineState = {
@@ -24,6 +35,7 @@ const INITIAL_STATE: EnsembleEngineState = {
   humanizationIntensity: 'moderate',
   hasRecording: false,
   seed: 0,
+  advanceWeight: 0.3,
 };
 
 const VALID_MODES: ScoreMode[] = ['riley', 'generative', 'euclidean'];
@@ -76,18 +88,54 @@ function App() {
     };
   }, []);
 
-  const handleStart = useCallback(async () => {
-    await engineRef.current.start();
+  // Guard against overlapping start() calls from rapid key presses
+  const startingRef = useRef(false);
 
-    // Update URL hash with current performance config
-    const state = engineRef.current.getState();
-    const params = new URLSearchParams({
-      seed: state.seed.toString(),
-      mode: state.scoreMode,
-      bpm: state.bpm.toString(),
-      count: state.performerCount.toString(),
-    });
-    window.location.hash = params.toString();
+  // Keyboard shortcuts for transport
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      // Ignore when typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === ' ') {
+        e.preventDefault();
+        const state = engineRef.current.getState();
+        if (state.playing) {
+          engineRef.current.stop();
+        } else if (!startingRef.current) {
+          startingRef.current = true;
+          engineRef.current.start().finally(() => { startingRef.current = false; });
+        }
+      } else if (e.key === 'Escape') {
+        const state = engineRef.current.getState();
+        if (!state.playing) {
+          engineRef.current.reset();
+          window.location.hash = '';
+          setEngineState(prev => ({ ...prev, seed: 0 }));
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  const handleStart = useCallback(async () => {
+    if (startingRef.current) return;
+    startingRef.current = true;
+    try {
+      await engineRef.current.start();
+
+      // Update URL hash with current performance config
+      const state = engineRef.current.getState();
+      const params = new URLSearchParams({
+        seed: state.seed.toString(),
+        mode: state.scoreMode,
+        bpm: state.bpm.toString(),
+        count: state.performerCount.toString(),
+      });
+      window.location.hash = params.toString();
+    } finally {
+      startingRef.current = false;
+    }
   }, []);
 
   const handleStop = useCallback(() => {
@@ -126,73 +174,183 @@ function App() {
     engineRef.current.exportMidi();
   }, []);
 
-  const handleAddPerformer = useCallback(() => {
-    if (engineState.playing) {
-      engineRef.current.addPerformer();
-    } else {
-      engineRef.current.setPerformerCount((engineState.performerCount ?? 8) + 1);
-      setEngineState(prev => ({ ...prev, performerCount: Math.min(16, (prev.performerCount ?? 8) + 1) }));
-    }
-  }, [engineState.playing, engineState.performerCount]);
+  const handleAdvanceWeightChange = useCallback((weight: number) => {
+    engineRef.current.setAdvanceWeight(weight);
+  }, []);
 
-  const handleRemovePerformer = useCallback((id: number) => {
+  const handleSetPerformerCount = useCallback((count: number) => {
+    const clamped = Math.max(2, Math.min(16, count));
     if (engineState.playing) {
-      engineRef.current.removePerformer(id);
+      const current = engineState.performers.filter(p => p.status !== 'complete').length;
+      if (clamped > current) {
+        for (let i = 0; i < clamped - current; i++) engineRef.current.addPerformer();
+      } else if (clamped < current) {
+        // Remove highest-id active performers first
+        const active = engineState.performers
+          .filter(p => p.status !== 'complete')
+          .sort((a, b) => b.id - a.id);
+        for (let i = 0; i < current - clamped && i < active.length; i++) {
+          engineRef.current.removePerformer(active[i].id);
+        }
+      }
     } else {
-      engineRef.current.setPerformerCount((engineState.performerCount ?? 8) - 1);
-      setEngineState(prev => ({ ...prev, performerCount: Math.max(2, (prev.performerCount ?? 8) - 1) }));
+      engineRef.current.setPerformerCount(clamped);
+      setEngineState(prev => ({ ...prev, performerCount: clamped }));
     }
-  }, [engineState.playing, engineState.performerCount]);
+  }, [engineState.playing, engineState.performers]);
+
+  const activeCount = engineState.playing
+    ? engineState.performers.filter(p => p.status !== 'complete').length
+    : engineState.performerCount;
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen gap-8 p-8">
-      <ScoreModeSelector
-        currentMode={engineState.scoreMode}
-        onChange={handleModeChange}
-        disabled={engineState.playing}
-      />
-      <PatternDisplay
-        performers={engineState.performers}
-        playing={engineState.playing}
-        ensembleComplete={engineState.ensembleComplete}
-        totalPatterns={engineState.totalPatterns}
-        scoreMode={engineState.scoreMode}
-      />
-      <Transport
-        playing={engineState.playing}
-        onStart={handleStart}
-        onStop={handleStop}
-        onReset={handleReset}
-      />
-      <SeedDisplay
-        seed={engineState.seed}
-        playing={engineState.playing}
-        onSeedChange={handleSeedChange}
-        mode={engineState.scoreMode}
-        bpm={engineState.bpm}
-        performerCount={engineState.performerCount}
-      />
-      <ExportButton
-        onExport={handleExport}
-        disabled={!engineState.hasRecording}
-      />
-      <PerformerControls
-        onAdd={handleAddPerformer}
-        onRemove={handleRemovePerformer}
-        performers={engineState.performers}
-        disabled={false}
-        count={engineState.playing ? undefined : engineState.performerCount}
-      />
-      <HumanizationToggle
-        enabled={engineState.humanizationEnabled}
-        intensity={engineState.humanizationIntensity}
-        onToggle={handleHumanizationToggle}
-        onIntensityChange={handleIntensityChange}
-      />
-      <BpmSlider
-        bpm={engineState.bpm}
-        onChange={handleBpmChange}
-      />
+    <div className="min-h-screen flex flex-col">
+      {/* Top bar */}
+      <header className="grid grid-cols-[1fr_auto_1fr] items-center border-b px-4 py-2">
+        <div />
+        <Transport
+          playing={engineState.playing}
+          onStart={handleStart}
+          onStop={handleStop}
+          onReset={handleReset}
+        />
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="outline" size="sm" aria-label="Open controls" className="justify-self-end">
+              <Settings2 />
+              Controls
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>Controls</SheetTitle>
+              <SheetDescription>Configure the performance</SheetDescription>
+            </SheetHeader>
+
+            <div className="flex flex-col gap-5 px-4 pb-6">
+              {/* Score mode */}
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Score Mode</label>
+                <p className="text-[11px] text-muted-foreground/70 mb-1.5">Choose the composition algorithm</p>
+                <ScoreModeSelector
+                  currentMode={engineState.scoreMode}
+                  onChange={handleModeChange}
+                  disabled={engineState.playing}
+                />
+              </div>
+
+              <Separator />
+
+              {/* Tempo */}
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Tempo</label>
+                <p className="text-[11px] text-muted-foreground/70 mb-1.5">Set the performance tempo</p>
+                <BpmSlider
+                  bpm={engineState.bpm}
+                  onChange={handleBpmChange}
+                />
+              </div>
+
+              <Separator />
+
+              {/* Performers */}
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Performers</label>
+                <p className="text-[11px] text-muted-foreground/70 mb-1.5">Set ensemble size (2–16)</p>
+                <PerformerControls
+                  onCountChange={handleSetPerformerCount}
+                  performers={engineState.performers}
+                  disabled={false}
+                  count={engineState.playing ? undefined : engineState.performerCount}
+                />
+              </div>
+
+              <Separator />
+
+              {/* Pattern advance */}
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Pattern Advance</label>
+                <p className="text-[11px] text-muted-foreground/70 mb-1.5">Likelihood of moving to the next pattern</p>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={10}
+                    max={60}
+                    step={1}
+                    value={Math.round(engineState.advanceWeight * 100)}
+                    onChange={(e) => handleAdvanceWeightChange(Number(e.target.value) / 100)}
+                    className="w-full accent-foreground"
+                    aria-label="Pattern advance probability"
+                  />
+                  <span className="text-sm tabular-nums shrink-0 whitespace-nowrap">
+                    {Math.round(engineState.advanceWeight * 100)}%
+                  </span>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Humanization */}
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Humanization</label>
+                <p className="text-[11px] text-muted-foreground/70 mb-1.5">Add natural timing variation</p>
+                <HumanizationToggle
+                  enabled={engineState.humanizationEnabled}
+                  intensity={engineState.humanizationIntensity}
+                  onToggle={handleHumanizationToggle}
+                  onIntensityChange={handleIntensityChange}
+                />
+              </div>
+
+              <Separator />
+
+              {/* Seed */}
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Seed</label>
+                <p className="text-[11px] text-muted-foreground/70 mb-1.5">Share or replay a specific performance</p>
+                <SeedDisplay
+                  seed={engineState.seed}
+                  playing={engineState.playing}
+                  onSeedChange={handleSeedChange}
+                  mode={engineState.scoreMode}
+                  bpm={engineState.bpm}
+                  performerCount={engineState.performerCount}
+                />
+              </div>
+
+              <Separator />
+
+              {/* Export */}
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Export</label>
+                {engineState.hasRecording ? (
+                  <>
+                    <p className="text-[11px] text-muted-foreground/70 mb-1.5">Download as MIDI file</p>
+                    <ExportButton onExport={handleExport} disabled={false} />
+                  </>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground/70">Start a performance to record a MIDI file</p>
+                )}
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+      </header>
+
+      {/* Performer visualization */}
+      <main
+        aria-label="Performer visualization"
+        className="flex-1 flex items-center justify-center p-4 lg:p-8"
+      >
+        <PatternDisplay
+          performers={engineState.performers}
+          playing={engineState.playing}
+          ensembleComplete={engineState.ensembleComplete}
+          totalPatterns={engineState.totalPatterns}
+          maxPerformers={16}
+          activeCount={activeCount}
+        />
+      </main>
     </div>
   );
 }
