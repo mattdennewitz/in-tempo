@@ -15,12 +15,22 @@
 import type { Pattern, ScoreMode } from '../audio/types.ts';
 import { PATTERNS } from './patterns.ts';
 import { assignInstrument } from '../audio/sampler.ts';
+import { SeededRng } from './rng.ts';
 import {
   computeVelocity,
   generateVelocityPersonality,
+  intensityScale,
   type VelocityConfig,
   type VelocityContext,
 } from './velocity.ts';
+import {
+  computeTimingOffset,
+  computeRubatoMultiplier,
+  advanceRubato,
+  generateTimingPersonality,
+  type TimingContext,
+  type RubatoState,
+} from './timing.ts';
 
 // ---------------------------------------------------------------------------
 // Interfaces
@@ -31,6 +41,7 @@ export interface AgentNoteEvent {
   midi: number;
   duration: number;
   velocity: number;
+  timingOffset: number;  // seconds, positive=late/drag, negative=early/rush
 }
 
 export interface EnsembleSnapshot {
@@ -55,6 +66,8 @@ export interface AgentPersonality {
   dropoutCooldown: number; // 16-48
   baseLoudness: number;    // 0.7-1.0
   jitterAmount: number;    // 0.02-0.12
+  rushDragBias: number;    // -0.3 to +0.3
+  timingJitter: number;    // 0.3 to 1.0
 }
 
 export interface AgentState {
@@ -69,6 +82,7 @@ export interface AgentState {
   beatsInCurrentNote: number;
   personality: AgentPersonality;
   entryDelay: number;
+  tickCount: number;
 }
 
 type Decision = 'advance' | 'repeat' | 'dropout';
@@ -78,14 +92,16 @@ type Decision = 'advance' | 'repeat' | 'dropout';
 // ---------------------------------------------------------------------------
 
 export function weightedChoice<T>(
-  options: Array<{ value: T; weight: number }>
+  options: Array<{ value: T; weight: number }>,
+  rng?: SeededRng,
 ): T {
   const totalWeight = options.reduce((sum, o) => sum + o.weight, 0);
   if (totalWeight <= 0) {
     return options[0].value;
   }
 
-  let r = Math.random() * totalWeight;
+  const _rng = rng ?? new SeededRng(Date.now() & 0xffffffff);
+  let r = _rng.random() * totalWeight;
   for (const option of options) {
     r -= option.weight;
     if (r <= 0) {
@@ -196,21 +212,25 @@ export function enforceBand(
 // Personality generation
 // ---------------------------------------------------------------------------
 
-function randomInRange(min: number, max: number): number {
-  return min + Math.random() * (max - min);
+function randomInRange(min: number, max: number, rng: SeededRng): number {
+  return min + rng.random() * (max - min);
 }
 
-export function generatePersonality(): AgentPersonality {
-  const velocityTraits = generateVelocityPersonality();
+export function generatePersonality(rng?: SeededRng): AgentPersonality {
+  const _rng = rng ?? new SeededRng(Date.now() & 0xffffffff);
+  const velocityTraits = generateVelocityPersonality(_rng);
+  const timingTraits = generateTimingPersonality(_rng);
   return {
-    advanceBias: randomInRange(0.8, 1.2),
-    repeatBias: randomInRange(0.8, 1.2),
-    dropoutBias: randomInRange(0.8, 1.2),
-    minSilentBeats: Math.floor(randomInRange(4, 16)),
-    maxSilentBeats: Math.floor(randomInRange(16, 64)),
-    dropoutCooldown: Math.floor(randomInRange(16, 48)),
+    advanceBias: randomInRange(0.8, 1.2, _rng),
+    repeatBias: randomInRange(0.8, 1.2, _rng),
+    dropoutBias: randomInRange(0.8, 1.2, _rng),
+    minSilentBeats: Math.floor(randomInRange(4, 16, _rng)),
+    maxSilentBeats: Math.floor(randomInRange(16, 64, _rng)),
+    dropoutCooldown: Math.floor(randomInRange(16, 48, _rng)),
     baseLoudness: velocityTraits.baseLoudness,
     jitterAmount: velocityTraits.jitterAmount,
+    rushDragBias: timingTraits.rushDragBias,
+    timingJitter: timingTraits.timingJitter,
   };
 }
 
@@ -224,6 +244,7 @@ export class PerformerAgent {
   private finalPatternIndex: number;
   private bandWidth: number;
   private velocityConfig: VelocityConfig;
+  private rng: SeededRng;
 
   constructor(
     id: number,
@@ -232,11 +253,13 @@ export class PerformerAgent {
     finalPatternIndex?: number,
     bandWidth?: number,
     velocityConfig?: VelocityConfig,
+    rng?: SeededRng,
   ) {
     this.patterns = patterns;
     this.finalPatternIndex = finalPatternIndex ?? patterns.length - 1;
     this.bandWidth = bandWidth ?? 3;
     this.velocityConfig = velocityConfig ?? { enabled: true, intensity: 'moderate' };
+    this.rng = rng ?? new SeededRng(Date.now() & 0xffffffff);
     const reps = this.randomReps();
     this._state = {
       id,
@@ -248,13 +271,14 @@ export class PerformerAgent {
       beatsSilent: 0,
       beatsSinceLastDropout: 100, // start high so dropout is possible early
       beatsInCurrentNote: 0,
-      personality: personality ?? generatePersonality(),
+      personality: personality ?? generatePersonality(this.rng),
       entryDelay: 0,
+      tickCount: 0,
     };
   }
 
   private randomReps(): number {
-    return Math.floor(Math.random() * 7) + 2; // 2-8
+    return this.rng.int(2, 8);
   }
 
   private setNewReps(): void {
@@ -263,8 +287,11 @@ export class PerformerAgent {
     this._state.repetitionsRemaining = reps;
   }
 
-  tick(snapshot: EnsembleSnapshot): AgentNoteEvent | null {
+  tick(snapshot: EnsembleSnapshot, bpm: number = 120): AgentNoteEvent | null {
     const s = this._state;
+
+    // Increment tick counter (before entry delay check for consistent counting)
+    s.tickCount++;
 
     // Staggered entry
     if (s.entryDelay > 0) {
@@ -339,11 +366,25 @@ export class PerformerAgent {
       config: this.velocityConfig,
     };
 
+    const secondsPerEighth = 60 / (bpm * 2);
+    const timingCtx: TimingContext = {
+      beatIndex: s.tickCount,
+      noteIndexInPattern: s.noteIndex - 1,
+      personality: {
+        rushDragBias: s.personality.rushDragBias,
+        timingJitter: s.personality.timingJitter,
+      },
+      density: snapshot.density,
+      config: this.velocityConfig,
+      secondsPerEighth,
+    };
+
     return {
       performerId: s.id,
       midi: note.midi,
       duration: note.duration,
-      velocity: computeVelocity(velocityCtx),
+      velocity: computeVelocity(velocityCtx, this.rng),
+      timingOffset: computeTimingOffset(timingCtx, this.rng),
     };
   }
 
@@ -362,7 +403,7 @@ export class PerformerAgent {
       { value: 'advance', weight: weights.advance },
       { value: 'repeat', weight: weights.repeat },
       { value: 'dropout', weight: weights.dropout },
-    ]);
+    ], this.rng);
 
     // Band enforcement (hard override)
     const enforced = enforceBand(s, decision, snapshot, this.bandWidth);
@@ -408,7 +449,7 @@ export class PerformerAgent {
     // Once > 60% are at the end, scaled dropout chance
     if (fractionAtEnd > 0.6) {
       const dropoutChance = (fractionAtEnd - 0.6) * 2.5 * 0.1;
-      if (Math.random() < dropoutChance) {
+      if (this.rng.random() < dropoutChance) {
         s.status = 'complete'; // Permanent, no rejoin
         return;
       }
@@ -445,7 +486,7 @@ export class PerformerAgent {
       rejoinProb += (0.5 - snapshot.density) * 0.4;
     }
 
-    if (Math.random() < rejoinProb) {
+    if (this.rng.random() < rejoinProb) {
       this.doRejoin(snapshot);
     }
   }
@@ -519,6 +560,7 @@ export class PerformerAgent {
     this._state.beatsSinceLastDropout = 100;
     this._state.beatsInCurrentNote = 0;
     this._state.entryDelay = 0;
+    this._state.tickCount = 0;
   }
 }
 
@@ -535,12 +577,16 @@ export class Ensemble {
   private nextId: number;
   private pendingRemovals: Set<number> = new Set();
   private velocityConfig: VelocityConfig;
+  private rng: SeededRng;
+  private rubatoState: RubatoState;
+  private _lastRubatoMultiplier: number = 1.0;
 
   constructor(
     count: number,
     patterns: Pattern[] = PATTERNS,
     mode: ScoreMode = 'riley',
     velocityConfig: VelocityConfig = { enabled: true, intensity: 'moderate' },
+    rng?: SeededRng,
   ) {
     this._scoreMode = mode;
     this._patterns = patterns;
@@ -549,19 +595,23 @@ export class Ensemble {
     this.agents = [];
     this.nextId = count;
     this.velocityConfig = velocityConfig;
+    this.rng = rng ?? new SeededRng(Date.now() & 0xffffffff);
+    this.rubatoState = { phase: 0, period: this.rng.int(16, 32) };
 
+    // INVARIANT: Agents are created and tick in array order. This guarantees
+    // the PRNG call sequence is deterministic for a given seed + performer count.
     let cumulativeDelay = 0;
     for (let i = 0; i < count; i++) {
       const agent = new PerformerAgent(
-        i, patterns, undefined, this.finalPatternIndex, this.bandWidth, this.velocityConfig
+        i, patterns, undefined, this.finalPatternIndex, this.bandWidth, this.velocityConfig, this.rng
       );
       agent._mutableState.entryDelay = cumulativeDelay;
-      cumulativeDelay += Math.floor(Math.random() * 3) + 2; // 2-4 beats
+      cumulativeDelay += this.rng.int(2, 4); // 2-4 beats
       this.agents.push(agent);
     }
   }
 
-  tick(): AgentNoteEvent[] {
+  tick(bpm: number = 120): AgentNoteEvent[] {
     // Process queued removals before snapshot (safe -- no iteration in progress)
     if (this.pendingRemovals.size > 0) {
       this.agents = this.agents.filter(a => !this.pendingRemovals.has(a.state.id));
@@ -576,11 +626,19 @@ export class Ensemble {
 
     const events: AgentNoteEvent[] = [];
     for (const agent of this.agents) {
-      const event = agent.tick(snapshot);
+      const event = agent.tick(snapshot, bpm);
       if (event) {
         events.push(event);
       }
     }
+
+    // Compute rubato multiplier for this tick, then advance phase
+    this._lastRubatoMultiplier = computeRubatoMultiplier(
+      this.rubatoState,
+      intensityScale(this.velocityConfig.intensity) * (this.velocityConfig.enabled ? 1.0 : 0.0),
+    );
+    this.rubatoState = advanceRubato(this.rubatoState);
+
     return events;
   }
 
@@ -625,13 +683,13 @@ export class Ensemble {
   /** Add a new agent that blends into the current musical position. Returns the new agent's id. */
   addAgent(): number {
     const id = this.nextId++;
-    const agent = new PerformerAgent(id, this._patterns, undefined, this.finalPatternIndex, this.bandWidth, this.velocityConfig);
+    const agent = new PerformerAgent(id, this._patterns, undefined, this.finalPatternIndex, this.bandWidth, this.velocityConfig, this.rng);
 
     // Start at current ensemble minimum pattern so the new performer blends in
     const snapshot = this.createSnapshot();
     agent._mutableState.patternIndex = snapshot.minPatternIndex;
     agent._mutableState.noteIndex = 0;
-    agent._mutableState.entryDelay = Math.floor(Math.random() * 3) + 2; // 2-4 beats stagger
+    agent._mutableState.entryDelay = this.rng.int(2, 4); // 2-4 beats stagger
 
     this.agents.push(agent);
     return id;
@@ -659,6 +717,10 @@ export class Ensemble {
 
   get agentCount(): number {
     return this.agents.length;
+  }
+
+  get rubatoMultiplier(): number {
+    return this._lastRubatoMultiplier;
   }
 
   get isComplete(): boolean {
@@ -697,6 +759,8 @@ export class Ensemble {
   reset(): void {
     this.pendingRemovals.clear();
     this.nextId = this.agents.length;
+    this.rubatoState = { phase: 0, period: this.rubatoState.period };
+    this._lastRubatoMultiplier = 1.0;
     for (const agent of this.agents) {
       agent.reset();
     }

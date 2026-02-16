@@ -30,8 +30,8 @@
 
 **Milestone Goal:** Elevate the listening and sharing experience with stereo spread, pattern visualization, shareable seeded performances, and microtiming humanization.
 
-- [ ] **Phase 7: Seeded PRNG** — Deterministic performances reproducible via shared URL
-- [ ] **Phase 8: Microtiming** — Swing, rubato, and per-performer timing personality
+- [x] **Phase 7: Seeded PRNG** — Deterministic performances reproducible via shared URL — completed 2026-02-15
+- [x] **Phase 8: Microtiming** — Swing, rubato, and per-performer timing personality — completed 2026-02-15
 - [ ] **Phase 9: Stereo Spread** — Performers panned across the stereo field
 - [ ] **Phase 10: Pattern Visualization** — Score overview and per-performer visual feedback
 
@@ -46,11 +46,12 @@
   2. The current seed is visible in the UI and can be copied to clipboard with one click
   3. User can enter a seed manually to replay a specific performance
   4. Pasting a shared URL into a browser auto-configures mode, BPM, performer count, and seed, then starts the same performance
-**Plans**: 2 plans
+**Plans**: 3 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — SeededRng class (Mulberry32) + replace all 32 Math.random() call sites
-- [ ] 07-02-PLAN.md — Wire RNG through AudioEngine, seed UI, URL hash sharing
+- [x] 07-01-PLAN.md — SeededRng class (Mulberry32) + replace all 32 Math.random() call sites
+- [x] 07-02-PLAN.md — Wire RNG through AudioEngine, seed UI, URL hash sharing
+- [x] 07-03-PLAN.md — Fix seed display: Engine intercepts onStateChange to overlay seed
 
 ### Phase 8: Microtiming
 **Goal**: Performances feel rhythmically organic with swing, rubato, and per-performer timing variation
@@ -61,11 +62,11 @@ Plans:
   2. Each performer has a subtle but audible timing personality (some rush, some drag) creating ensemble spread
   3. Rubato gently breathes the effective tempo so the ensemble feels less mechanical
   4. Microtiming is controlled through the existing humanization toggle and intensity levels
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 08-01: TBD
-- [ ] 08-02: TBD
+- [x] 08-01-PLAN.md — TDD timing.ts: pure timing offset computation (swing, personality, jitter, density) + extend ensemble types
+- [x] 08-02-PLAN.md — Wire rubato into Ensemble, apply timing offsets in Scheduler
 
 ### Phase 9: Stereo Spread
 **Goal**: Each performer occupies a distinct position in the stereo field, giving spatial clarity to the ensemble
@@ -105,8 +106,8 @@ Plans:
 | 4. Composition Modes | v1.0 | 3/3 | Complete | 2026-02-15 |
 | 5. Velocity Humanization | v1.1 | 3/3 | Complete | 2026-02-15 |
 | 6. MIDI Export | v1.1 | 2/2 | Complete | 2026-02-15 |
-| 7. Seeded PRNG | v1.2 | 0/2 | Planned | - |
-| 8. Microtiming | v1.2 | 0/TBD | Not started | - |
+| 7. Seeded PRNG | v1.2 | 3/3 | Complete | 2026-02-15 |
+| 8. Microtiming | v1.2 | 2/2 | Complete | 2026-02-15 |
 | 9. Stereo Spread | v1.2 | 0/TBD | Not started | - |
 | 10. Pattern Visualization | v1.2 | 0/TBD | Not started | - |
 

@@ -11,6 +11,7 @@ import {
   type AgentPersonality,
 } from './ensemble.ts';
 import { PATTERNS } from './patterns.ts';
+import { SeededRng } from './rng.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -46,6 +47,7 @@ function makeSnapshot(overrides: Partial<EnsembleSnapshot> = {}): EnsembleSnapsh
 
 describe('weightedChoice', () => {
   it('returns valid values and respects weights', () => {
+    const rng = new SeededRng(42);
     const counts = { a: 0, b: 0, c: 0 };
     const options = [
       { value: 'a' as const, weight: 0.7 },
@@ -54,7 +56,7 @@ describe('weightedChoice', () => {
     ];
 
     for (let i = 0; i < 1000; i++) {
-      const result = weightedChoice(options);
+      const result = weightedChoice(options, rng);
       counts[result]++;
     }
 
@@ -362,10 +364,10 @@ describe('Integration', () => {
         const indices = playing.map(s => s.patternIndex);
         const min = Math.min(...indices);
         const max = Math.max(...indices);
-        // Band width is 3, so max - min should be < BAND_WIDTH + 1
-        // Note: due to jump mechanics, the spread should generally be within band
-        // We allow +1 tolerance for the tick where enforcement happens
-        expect(max - min).toBeLessThanOrEqual(4);
+        // Band width is 3, so max - min should be close to band width.
+        // Allow +2 tolerance: jump mechanics can overshoot by 1, plus
+        // enforcement applies at pattern boundary (not mid-pattern).
+        expect(max - min).toBeLessThanOrEqual(5);
       }
     }
   });

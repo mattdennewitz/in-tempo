@@ -8,6 +8,7 @@ import { PatternDisplay } from './components/PatternDisplay.tsx';
 import { PerformerControls } from './components/PerformerControls.tsx';
 import { HumanizationToggle } from './components/HumanizationToggle.tsx';
 import { ExportButton } from './components/ExportButton.tsx';
+import { SeedDisplay } from './components/SeedDisplay.tsx';
 import './App.css';
 
 const INITIAL_STATE: EnsembleEngineState = {
@@ -22,7 +23,27 @@ const INITIAL_STATE: EnsembleEngineState = {
   humanizationEnabled: true,
   humanizationIntensity: 'moderate',
   hasRecording: false,
+  seed: 0,
 };
+
+const VALID_MODES: ScoreMode[] = ['riley', 'generative', 'euclidean'];
+
+function parsePerformanceHash(): { seed: number; mode: ScoreMode; bpm: number; count: number } | null {
+  const hash = window.location.hash.slice(1);
+  if (!hash) return null;
+  const params = new URLSearchParams(hash);
+  const seed = params.get('seed');
+  const mode = params.get('mode');
+  const bpm = params.get('bpm');
+  const count = params.get('count');
+  if (!seed || !mode || !bpm || !count) return null;
+  if (!VALID_MODES.includes(mode as ScoreMode)) return null;
+  const parsedSeed = parseInt(seed, 10);
+  const parsedBpm = parseInt(bpm, 10);
+  const parsedCount = parseInt(count, 10);
+  if (isNaN(parsedSeed) || isNaN(parsedBpm) || isNaN(parsedCount)) return null;
+  return { seed: parsedSeed, mode: mode as ScoreMode, bpm: parsedBpm, count: parsedCount };
+}
 
 function App() {
   const engineRef = useRef<AudioEngine>(new AudioEngine());
@@ -32,6 +53,23 @@ function App() {
   useEffect(() => {
     const engine = engineRef.current;
     engine.onStateChange = setEngineState;
+
+    // Parse URL hash on mount to pre-configure performance
+    const config = parsePerformanceHash();
+    if (config) {
+      engine.setSeed(config.seed);
+      engine.setScoreMode(config.mode);
+      engine.setBpm(config.bpm);
+      engine.setPerformerCount(config.count);
+      setEngineState(prev => ({
+        ...prev,
+        seed: config.seed,
+        scoreMode: config.mode,
+        bpm: config.bpm,
+        performerCount: config.count,
+      }));
+    }
+
     return () => {
       engine.onStateChange = null;
       engine.dispose();
@@ -40,6 +78,16 @@ function App() {
 
   const handleStart = useCallback(async () => {
     await engineRef.current.start();
+
+    // Update URL hash with current performance config
+    const state = engineRef.current.getState();
+    const params = new URLSearchParams({
+      seed: state.seed.toString(),
+      mode: state.scoreMode,
+      bpm: state.bpm.toString(),
+      count: state.performerCount.toString(),
+    });
+    window.location.hash = params.toString();
   }, []);
 
   const handleStop = useCallback(() => {
@@ -48,6 +96,9 @@ function App() {
 
   const handleReset = useCallback(() => {
     engineRef.current.reset();
+    // Clear URL hash on reset
+    window.location.hash = '';
+    setEngineState(prev => ({ ...prev, seed: 0 }));
   }, []);
 
   const handleBpmChange = useCallback((newBpm: number) => {
@@ -56,6 +107,11 @@ function App() {
 
   const handleModeChange = useCallback((mode: ScoreMode) => {
     engineRef.current.setScoreMode(mode);
+  }, []);
+
+  const handleSeedChange = useCallback((seed: number) => {
+    engineRef.current.setSeed(seed);
+    setEngineState(prev => ({ ...prev, seed }));
   }, []);
 
   const handleHumanizationToggle = useCallback(() => {
@@ -107,6 +163,14 @@ function App() {
         onStart={handleStart}
         onStop={handleStop}
         onReset={handleReset}
+      />
+      <SeedDisplay
+        seed={engineState.seed}
+        playing={engineState.playing}
+        onSeedChange={handleSeedChange}
+        mode={engineState.scoreMode}
+        bpm={engineState.bpm}
+        performerCount={engineState.performerCount}
       />
       <ExportButton
         onExport={handleExport}

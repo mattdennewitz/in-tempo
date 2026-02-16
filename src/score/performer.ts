@@ -7,6 +7,7 @@
  */
 import type { ScoreNote, Pattern } from '../audio/types.ts';
 import { PATTERNS } from './patterns.ts';
+import { SeededRng } from './rng.ts';
 
 export class Performer {
   private patterns: Pattern[];
@@ -14,15 +15,17 @@ export class Performer {
   private currentNoteIndex: number = 0;
   private repetitionsRemaining: number;
   private shouldRest: boolean = false;
+  private rng: SeededRng;
 
-  constructor(patterns: Pattern[] = PATTERNS) {
+  constructor(patterns: Pattern[] = PATTERNS, rng?: SeededRng) {
     this.patterns = patterns;
+    this.rng = rng ?? new SeededRng(Date.now() & 0xffffffff);
     this.repetitionsRemaining = this.randomRepetitions();
   }
 
   /** Returns a random repetition count between 2 and 8 (inclusive, uniform). */
   private randomRepetitions(): number {
-    return Math.floor(Math.random() * 7) + 2;
+    return this.rng.int(2, 8);
   }
 
   /**
@@ -59,7 +62,7 @@ export class Performer {
         this.repetitionsRemaining = this.randomRepetitions();
 
         // ~30% chance of a rest beat between patterns
-        if (this.currentPatternIndex < this.patterns.length && Math.random() < 0.3) {
+        if (this.currentPatternIndex < this.patterns.length && this.rng.random() < 0.3) {
           this.shouldRest = true;
         }
       }

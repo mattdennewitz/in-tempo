@@ -9,6 +9,11 @@
 
 import type { ScoreNote, Pattern } from '../audio/types.ts';
 import { bjorklund, rotatePattern } from './bjorklund.ts';
+import { SeededRng } from './rng.ts';
+
+// Module-level RNG reference, set by generateEuclideanPatterns() for use by
+// all helper functions within a single generation call.
+let _rng: SeededRng;
 
 // C-major pentatonic scale degrees (semitones from C): C D E G A
 const PENTATONIC_DEGREES = [0, 2, 4, 7, 9];
@@ -40,9 +45,7 @@ function rhythmToNotes(
     Math.floor(PENTATONIC_PITCHES.length * (0.4 + progress * 0.6)),
   );
 
-  const singlePitch = PENTATONIC_PITCHES[
-    Math.floor(Math.random() * (maxIndex - minIndex + 1)) + minIndex
-  ];
+  const singlePitch = PENTATONIC_PITCHES[_rng.int(minIndex, maxIndex)];
 
   return rhythm.map((step) => {
     if (step === 0) {
@@ -50,9 +53,7 @@ function rhythmToNotes(
     }
 
     if (melodic) {
-      const pitch = PENTATONIC_PITCHES[
-        Math.floor(Math.random() * (maxIndex - minIndex + 1)) + minIndex
-      ];
+      const pitch = PENTATONIC_PITCHES[_rng.int(minIndex, maxIndex)];
       return { midi: pitch, duration: 1 };
     }
 
@@ -64,8 +65,9 @@ function rhythmToNotes(
  * Generate 20-40 Euclidean rhythm patterns with progressive density arc,
  * pentatonic pitches, and interlocking complementary pairs.
  */
-export function generateEuclideanPatterns(): Pattern[] {
-  const targetCount = Math.floor(Math.random() * 21) + 20; // 20-40
+export function generateEuclideanPatterns(rng?: SeededRng): Pattern[] {
+  _rng = rng ?? new SeededRng(Date.now() & 0xffffffff);
+  const targetCount = _rng.int(20, 40);
   const patterns: Pattern[] = [];
   let id = 1;
 
@@ -74,7 +76,7 @@ export function generateEuclideanPatterns(): Pattern[] {
     const isEndgame = i >= targetCount - 5;
 
     // Step count: 4-16
-    const steps = Math.floor(Math.random() * 13) + 4;
+    const steps = _rng.int(4, 16);
 
     // Progressive density: 20% to 70%, endgame caps at 30%
     let baseDensity = 0.2 + progress * 0.5;
@@ -84,11 +86,11 @@ export function generateEuclideanPatterns(): Pattern[] {
     const pulses = Math.max(1, Math.round(steps * baseDensity));
 
     // Apply random rotation for phase relationships
-    const rotation = Math.floor(Math.random() * steps);
+    const rotation = _rng.int(0, steps - 1);
     const rhythm = rotatePattern(bjorklund(pulses, steps), rotation);
 
     // Decide: ~40% single-pitch rhythmic, ~60% melodic
-    const melodic = Math.random() < 0.6;
+    const melodic = _rng.random() < 0.6;
     const notes = rhythmToNotes(rhythm, melodic, progress);
 
     patterns.push({ id, notes });
@@ -98,7 +100,7 @@ export function generateEuclideanPatterns(): Pattern[] {
     if (
       !isEndgame &&
       i < targetCount - 1 &&
-      Math.random() < 0.3 &&
+      _rng.random() < 0.3 &&
       patterns.length < 40
     ) {
       const complement = rhythm.map((v) => 1 - v);
@@ -115,11 +117,11 @@ export function generateEuclideanPatterns(): Pattern[] {
   // Ensure minimum 20 patterns by generating extras if needed
   while (patterns.length < 20) {
     const progress = 0.5; // Mid-range density for fill patterns
-    const steps = Math.floor(Math.random() * 13) + 4;
+    const steps = _rng.int(4, 16);
     const pulses = Math.max(1, Math.round(steps * 0.35));
-    const rotation = Math.floor(Math.random() * steps);
+    const rotation = _rng.int(0, steps - 1);
     const rhythm = rotatePattern(bjorklund(pulses, steps), rotation);
-    const melodic = Math.random() < 0.6;
+    const melodic = _rng.random() < 0.6;
     const notes = rhythmToNotes(rhythm, melodic, progress);
     patterns.push({ id, notes });
     id++;

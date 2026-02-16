@@ -7,9 +7,11 @@
 //   3. Metric accent — first note of pattern iteration gets a boost
 //   4. Phrase contour — bell curve across repetitions
 //
-// All functions are pure (aside from Math.random for jitter).
+// All functions are pure (RNG injected for jitter).
 // Velocity is normalized to 0.0-1.0; callers scale to target range.
 // ---------------------------------------------------------------------------
+
+import { SeededRng } from './rng.ts';
 
 export interface VelocityPersonality {
   /** Per-performer average dynamic level (0.7-1.0) */
@@ -76,14 +78,15 @@ function phraseContour(
  * Returns a value clamped to [0.3, 1.0].
  * When humanization is disabled, returns exactly 1.0.
  */
-export function computeVelocity(ctx: VelocityContext): number {
+export function computeVelocity(ctx: VelocityContext, rng?: SeededRng): number {
   if (!ctx.config.enabled) return 1.0;
 
+  const _rng = rng ?? new SeededRng(Date.now() & 0xffffffff);
   const scale = intensityScale(ctx.config.intensity);
 
   // Layer 1: Per-note random jitter (uniform distribution)
   const jitter =
-    1.0 + (Math.random() - 0.5) * 2 * ctx.personality.jitterAmount * scale;
+    1.0 + (_rng.random() - 0.5) * 2 * ctx.personality.jitterAmount * scale;
 
   // Layer 2: Performer personality (base loudness)
   const personality = ctx.personality.baseLoudness;
@@ -101,9 +104,10 @@ export function computeVelocity(ctx: VelocityContext): number {
 /**
  * Generate a random velocity personality for a performer.
  */
-export function generateVelocityPersonality(): VelocityPersonality {
+export function generateVelocityPersonality(rng?: SeededRng): VelocityPersonality {
+  const _rng = rng ?? new SeededRng(Date.now() & 0xffffffff);
   return {
-    baseLoudness: 0.7 + Math.random() * 0.3, // [0.7, 1.0)
-    jitterAmount: 0.02 + Math.random() * 0.1, // [0.02, 0.12)
+    baseLoudness: 0.7 + _rng.random() * 0.3, // [0.7, 1.0)
+    jitterAmount: 0.02 + _rng.random() * 0.1, // [0.02, 0.12)
   };
 }

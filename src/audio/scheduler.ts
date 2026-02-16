@@ -120,6 +120,7 @@ export class Scheduler {
       humanizationEnabled: vc.enabled,
       humanizationIntensity: vc.intensity,
       hasRecording: (this.midiRecorder?.eventCount ?? 0) > 0,
+      seed: 0, // Engine overlays actual seed value
     };
   }
 
@@ -159,7 +160,7 @@ export class Scheduler {
    * or sampled instrument).
    */
   private scheduleBeat(time: number): void {
-    const events = this.ensemble.tick();
+    const events = this.ensemble.tick(this._bpm);
 
     // Check for ensemble completion
     if (this.ensemble.isComplete) {
@@ -171,6 +172,12 @@ export class Scheduler {
 
     for (const event of events) {
       if (event.midi === 0) continue;
+
+      // Apply per-note timing offset, clamped to prevent scheduling in the past
+      const offsetTime = Math.max(
+        this.audioContext.currentTime,
+        time + event.timingOffset,
+      );
 
       const instrument = assignInstrument(event.performerId);
       const noteDurationSeconds = event.duration * secondsPerEighth;
@@ -187,10 +194,10 @@ export class Scheduler {
           this.releaseTimers.delete(voice.index);
         }
 
-        voice.node.port.postMessage({ type: 'noteOn', frequency, time, gain: event.velocity * 0.3 });
+        voice.node.port.postMessage({ type: 'noteOn', frequency, time: offsetTime, gain: event.velocity * 0.3 });
 
-        // Schedule release after event.duration eighth notes
-        const noteEndTime = time + noteDurationSeconds;
+        // Schedule release after event.duration eighth notes (relative to offset start)
+        const noteEndTime = offsetTime + noteDurationSeconds;
         const delayMs = Math.max(0, (noteEndTime - this.audioContext.currentTime) * 1000);
 
         const releaseTimer = setTimeout(() => {
@@ -203,7 +210,7 @@ export class Scheduler {
       } else {
         // Route through SamplePlayer (smplr piano/marimba)
         const smplrVelocity = Math.round(event.velocity * 127);
-        this.samplePlayer.play(instrument, event.midi, time, noteDurationSeconds, smplrVelocity);
+        this.samplePlayer.play(instrument, event.midi, offsetTime, noteDurationSeconds, smplrVelocity);
       }
 
       // Record event for MIDI export
@@ -232,6 +239,7 @@ export class Scheduler {
    */
   private advanceTime(): void {
     const secondsPerEighth = 60 / (this._bpm * 2);
-    this.nextNoteTime += secondsPerEighth;
+    const rubatoMultiplier = this.ensemble.rubatoMultiplier;
+    this.nextNoteTime += secondsPerEighth * rubatoMultiplier;
   }
 }

@@ -16,6 +16,7 @@ import { exportToMidi, downloadMidi } from './midi-exporter.ts';
 import { Ensemble } from '../score/ensemble.ts';
 import { PATTERNS } from '../score/patterns.ts';
 import { getPatternsForMode } from '../score/score-modes.ts';
+import { SeededRng } from '../score/rng.ts';
 
 export class AudioEngine {
   private audioContext: AudioContext | null = null;
@@ -31,6 +32,17 @@ export class AudioEngine {
   private currentPatterns: Pattern[] = PATTERNS;
   private velocityConfig: VelocityConfig = { enabled: true, intensity: 'moderate' };
   private midiRecorder: MidiRecorder = new MidiRecorder();
+  private currentSeed: number = 0;
+
+  /** Set seed for next performance start. 0 means auto-generate. */
+  setSeed(seed: number): void {
+    this.currentSeed = seed;
+  }
+
+  /** Get current seed value. */
+  get seed(): number {
+    return this.currentSeed;
+  }
 
   /**
    * Initialize the audio subsystem: create AudioContext, load worklet module,
@@ -42,7 +54,14 @@ export class AudioEngine {
     this.audioContext = new AudioContext();
     await this.audioContext.audioWorklet.addModule('/synth-processor.js');
 
-    this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode, this.velocityConfig);
+    // Generate seed if not set, create RNG for deterministic performance
+    if (this.currentSeed === 0) {
+      this.currentSeed = Date.now() & 0xFFFFFFFF;
+    }
+    const rng = new SeededRng(this.currentSeed);
+    this.currentPatterns = getPatternsForMode(this.currentMode, rng);
+
+    this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode, this.velocityConfig, rng);
     this.voicePool = new VoicePool(this.audioContext, this.initialPerformerCount * 2);
 
     // Initialize sampled instruments (loads from CDN)
@@ -62,10 +81,13 @@ export class AudioEngine {
     this.scheduler.velocityConfigRef = { current: this.velocityConfig };
     this.scheduler.midiRecorder = this.midiRecorder;
 
-    // Apply any callback that was set before initialization
+    // Apply any callback that was set before initialization (wrap to overlay seed)
     if (this.pendingOnStateChange) {
-      this.scheduler.onStateChange = this.pendingOnStateChange;
-      this.pendingOnStateChange = null;
+      const cb = this.pendingOnStateChange;
+      this.scheduler.onStateChange = (state) => {
+        state.seed = this.currentSeed;
+        cb(state);
+      };
     }
 
     this.initialized = true;
@@ -97,6 +119,7 @@ export class AudioEngine {
   reset(): void {
     this.scheduler?.reset();
     this.midiRecorder.clear();
+    this.currentSeed = 0;
   }
 
   /** Set BPM (clamped to 100-180). Takes effect on next beat. */
@@ -135,11 +158,18 @@ export class AudioEngine {
     this.initialPerformerCount = Math.max(2, Math.min(16, count));
     if (this.initialized && !this.getState().playing) {
       // Rebuild ensemble with new count so next start() uses it
-      const callback = this.scheduler?.onStateChange ?? null;
+      const callback = this.pendingOnStateChange;
       this.scheduler?.reset();
       this.voicePool?.stopAll();
       this.voicePool?.resize(this.initialPerformerCount * 2);
-      this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode, this.velocityConfig);
+
+      // Create seeded RNG for deterministic rebuild
+      if (this.currentSeed === 0) {
+        this.currentSeed = Date.now() & 0xFFFFFFFF;
+      }
+      const rng = new SeededRng(this.currentSeed);
+      this.currentPatterns = getPatternsForMode(this.currentMode, rng);
+      this.ensemble = new Ensemble(this.initialPerformerCount, this.currentPatterns, this.currentMode, this.velocityConfig, rng);
       this.scheduler = new Scheduler(
         this.audioContext!,
         this.voicePool!,
@@ -150,7 +180,10 @@ export class AudioEngine {
       this.scheduler.velocityConfigRef = { current: this.velocityConfig };
       this.scheduler.midiRecorder = this.midiRecorder;
       if (callback) {
-        this.scheduler.onStateChange = callback;
+        this.scheduler.onStateChange = (state) => {
+          state.seed = this.currentSeed;
+          callback(state);
+        };
       }
       this.scheduler.fireStateChange();
     }
@@ -200,7 +233,7 @@ export class AudioEngine {
 
   /** Get current ensemble engine state. */
   getState(): EnsembleEngineState {
-    return this.scheduler?.getState() ?? {
+    const base = this.scheduler?.getState() ?? {
       playing: false,
       bpm: 120,
       performers: [],
@@ -212,7 +245,11 @@ export class AudioEngine {
       humanizationEnabled: this.velocityConfig.enabled,
       humanizationIntensity: this.velocityConfig.intensity,
       hasRecording: false,
+      seed: 0,
     };
+    // Engine owns the seed -- overlay it on scheduler state
+    base.seed = this.currentSeed;
+    return base;
   }
 
   /**
@@ -221,18 +258,24 @@ export class AudioEngine {
    */
   setScoreMode(mode: ScoreMode): void {
     this.currentMode = mode;
-    this.currentPatterns = getPatternsForMode(mode);
+
+    // Create seeded RNG for deterministic pattern generation
+    if (this.currentSeed === 0) {
+      this.currentSeed = Date.now() & 0xFFFFFFFF;
+    }
+    const rng = new SeededRng(this.currentSeed);
+    this.currentPatterns = getPatternsForMode(mode, rng);
 
     if (this.initialized) {
-      // Preserve callback before tearing down old scheduler
-      const callback = this.scheduler?.onStateChange ?? this.pendingOnStateChange;
+      // Use raw callback (pendingOnStateChange), not the wrapped scheduler version
+      const callback = this.pendingOnStateChange;
 
       // Fully dispose old scheduler (clears tick timer + release timers)
       this.scheduler?.reset();
       this.voicePool?.stopAll();
 
       // Rebuild ensemble and scheduler with new patterns
-      this.ensemble = new Ensemble(this.performerCount, this.currentPatterns, mode, this.velocityConfig);
+      this.ensemble = new Ensemble(this.performerCount, this.currentPatterns, mode, this.velocityConfig, rng);
       this.scheduler = new Scheduler(
         this.audioContext!,
         this.voicePool!,
@@ -243,9 +286,12 @@ export class AudioEngine {
       this.scheduler.velocityConfigRef = { current: this.velocityConfig };
       this.scheduler.midiRecorder = this.midiRecorder;
 
-      // Reconnect callback and fire state change
+      // Reconnect callback (wrapped to overlay seed) and fire state change
       if (callback) {
-        this.scheduler.onStateChange = callback;
+        this.scheduler.onStateChange = (state) => {
+          state.seed = this.currentSeed;
+          callback(state);
+        };
         callback(this.getState());
       }
     } else if (this.pendingOnStateChange) {
@@ -264,12 +310,14 @@ export class AudioEngine {
     return this.currentPatterns.length;
   }
 
-  /** Set state change callback. Passes through to scheduler, or stores for later. */
+  /** Set state change callback. Wraps callback to overlay Engine-owned seed before reaching React. */
   set onStateChange(cb: ((state: EnsembleEngineState) => void) | null) {
+    this.pendingOnStateChange = cb;
     if (this.scheduler) {
-      this.scheduler.onStateChange = cb;
-    } else {
-      this.pendingOnStateChange = cb;
+      this.scheduler.onStateChange = cb ? (state) => {
+        state.seed = this.currentSeed;
+        cb(state);
+      } : null;
     }
   }
 

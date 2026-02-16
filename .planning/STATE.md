@@ -5,34 +5,36 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Ensemble behavior must feel alive -- performers making believable musical decisions over a precisely timed audio engine, so each performance is unique and compelling.
-**Current focus:** Phase 7 — Seeded PRNG (deterministic performances via shared URL)
+**Current focus:** Phase 8 complete -- Microtiming fully wired (timing offsets + rubato in scheduler)
 
 ## Current Position
 
-Phase: 7 of 10 (Seeded PRNG)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-15 — v1.2 roadmap created (4 phases, 17 requirements)
+Phase: 8 of 10 (Microtiming) -- COMPLETE
+Plan: 2 of 2 in current phase (done)
+Status: Phase 8 complete
+Last activity: 2026-02-15 -- Completed 08-02 (Scheduler integration -- timing offsets and rubato)
 
-Progress: [██████████████░░░░░░] 70% (16/16 v1.0+v1.1 plans complete, 0/TBD v1.2)
+Progress: [████████████████████] 85% (18/18 plans complete through 08-02)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 16 (v1.0: 11, v1.1: 5)
-- Average duration: —
-- Total execution time: —
+- Total plans completed: 20 (v1.0: 11, v1.1: 5, v1.2: 4)
+- Average duration: --
+- Total execution time: --
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1-4 (v1.0) | 11 | — | — |
-| 5-6 (v1.1) | 5 | — | — |
+| 1-4 (v1.0) | 11 | -- | -- |
+| 5-6 (v1.1) | 5 | -- | -- |
+| 7 (v1.2) | 3 | 10min | 3min |
+| 8 (v1.2) | 2 | 6min | 3min |
 
 **Recent Trend:**
-- Last 5 plans: —
-- Trend: —
+- Last 5 plans: --
+- Trend: --
 
 *Updated after each plan completion*
 
@@ -43,9 +45,18 @@ Progress: [██████████████░░░░░░] 70% (16
 All decisions logged in PROJECT.md Key Decisions table.
 
 Recent decisions affecting current work:
+- 08-02: Rubato getter (Option A) instead of tick() return type change
+- 08-02: Rubato period preserved across reset (personality of the performance)
+- 08-01: Per-agent tickCount for beat index (not passed through tick() signature)
+- 08-01: Ensemble.tick(bpm) optional parameter with default 120 (backward compatible)
+- 08-01: Timing personality generated alongside velocity personality in generatePersonality()
 - v1.2: Seeded PRNG before microtiming (foundation for deterministic timing jitter)
 - v1.2: Mulberry32 hand-rolled PRNG, no npm dependency (15 lines, period 4B)
-- v1.2: Per-agent PRNG streams vs single stream TBD during Phase 7 planning
+- 07-01: Single PRNG stream shared across all agents (not per-agent streams)
+- 07-01: Module-level _rng pattern for generators, constructor injection for Ensemble
+- 07-01: All RNG params optional with Date.now() fallback (zero breaking changes)
+- 07-02: Engine owns the seed and overlays it on scheduler state (single source of truth)
+- 07-03: Callback wrapping pattern -- Engine wraps onStateChange at all scheduler assignment sites to overlay seed
 
 ### Pending Todos
 
@@ -53,12 +64,11 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 7: 30+ Math.random() call sites must ALL be replaced for determinism (silent failure if any missed)
-- Phase 8: Microtiming offsets must stay within 100ms lookahead window (clamp required)
+- Phase 8: Microtiming offsets clamped to +/-50ms (implemented in 08-01)
 - Phase 9: smplr per-note destination routing needs runtime verification
 
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: v1.2 roadmap created, ready to plan Phase 7
+Stopped at: Completed 08-02-PLAN.md (Scheduler integration -- microtiming fully wired)
 Resume file: None
